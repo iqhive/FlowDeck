@@ -22,10 +22,10 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "bun build src/index.ts --outdir dist --target node --format esm --external @opencode/plugin --external zod && tsc --emitDeclarationOnly --project tsconfig.build.json",
+    "bundle": "bun build src/index.ts --outdir dist --target node --format esm --external @opencode/plugin --external zod && tsc --emitDeclarationOnly --project tsconfig.build.json",
     "build:fdx": "cargo install --path crates/fdx --quiet",
     "check:fdx": "fdx --version",
-    "prepublishOnly": "bun run clean && bun run build",
+    "prepublishOnly": "bun run clean && bun run bundle",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "validate:skills": "node scripts/validate-skills.mjs",
