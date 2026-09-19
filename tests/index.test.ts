@@ -2,19 +2,20 @@
  * Plugin Entry Integration Tests
  *
  * Covers:
- * - The plugin factory returns the expected shape.
+ * - `setup()` registers agents, MCPs, commands, skills, tools and hooks via the V2 context.
  * - Surviving tool registrations are present.
- * - tool.execute.before calls guard-rails + loop detector (no longer attaches routing hints).
- * - event hook calls sessionStartHook on session.created.
+ * - tool `execute.before` calls guard-rails + loop detector (no longer attaches routing hints).
+ * - event subscription calls sessionStartHook on session.created.
  * - Removed tools are not registered.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
+import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readFileSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
 import { planningDir } from "@/tools/planning-state-lib"
 import plugin from "@/index"
+import { setupPlugin } from "./helpers/plugin-context"
 
 function makeTempDir(): string {
   return mkdtempSync(join(tmpdir(), "flowdeck-index-test-"))
@@ -26,37 +27,21 @@ function writeState(dir: string): void {
   writeFileSync(join(pd, "STATE.md"), "---\nphase: 1\n---\n# State", "utf-8")
 }
 
-function createMockClient(events: unknown[] = []) {
-  return {
-    app: {
-      log: vi.fn().mockResolvedValue(undefined),
-    },
-    session: {
-      create: vi.fn().mockResolvedValue({ data: { id: "child-1" }, error: null }),
-      promptAsync: vi.fn().mockResolvedValue({ data: null, error: null }),
-    },
-    event: {
-      subscribe: vi.fn().mockResolvedValue({
-        stream: (async function* () {
-          for (const event of events) {
-            yield event
-          }
-        })(),
-      }),
-    },
-  }
+function readLog(dir: string): string {
+  const logPath = join(dir, ".opencode", "flowdeck.log")
+  return existsSync(logPath) ? readFileSync(logPath, "utf-8") : ""
 }
 
-interface TestHooks {
-  name: string
-  agent?: Record<string, unknown>
-  mcp?: Record<string, unknown>
-  tool?: Record<string, { execute: (...args: any[]) => any }>
-  config?: (cfg: any) => Promise<void>
-  "tool.execute.before"?: (input: any, output: any) => Promise<void>
-  "tool.execute.after"?: (input: any, output: any) => Promise<void>
-  event?: (input: { event: any }) => Promise<void>
-}
+const toolEvent = (tool: string, input: unknown, sessionID = "sess-1", agent = "backend-coder") => ({
+  tool,
+  sessionID,
+  agent,
+  messageID: "msg-1",
+  id: "call-1",
+  input,
+})
+const beforeEvent = (tool: string, input: unknown, sessionID = "sess-1", agent = "backend-coder") =>
+  toolEvent(tool, input, sessionID, agent) as never
 
 describe("plugin entry", () => {
   let dir: string
@@ -71,29 +56,32 @@ describe("plugin entry", () => {
     rmSync(planningDir(dir), { recursive: true, force: true })
   })
 
-  async function loadPlugin(client: any): Promise<TestHooks> {
-    return (await plugin({ directory: dir, client } as any, {})) as unknown as TestHooks
-  }
+  it("is a V2 plugin definition with the flowdeck id", () => {
+    expect(plugin.id).toBe("flowdeck")
+    expect(typeof plugin.setup).toBe("function")
+  })
 
-  it("returns a plugin object with expected registration keys", async () => {
-    const client = createMockClient()
-    const instance = await loadPlugin(client)
+  it("registers agents, MCPs, commands, skills, tools and hooks", async () => {
+    const instance = await setupPlugin(dir)
 
-    expect(instance.name).toBe("@dv.nghiem/flowdeck")
-    expect(instance.agent).toBeDefined()
-    expect(instance.mcp).toBeDefined()
-    expect(instance.tool).toBeDefined()
-    expect(instance.config).toBeDefined()
-    expect(instance["tool.execute.before"]).toBeDefined()
-    expect(instance["tool.execute.after"]).toBeDefined()
-    expect(instance.event).toBeDefined()
+    expect(instance.defaultAgent).toBe("orchestrator")
+    expect(instance.agents.has("orchestrator")).toBe(true)
+    expect(instance.agents.get("orchestrator")?.mode).toBe("primary")
+    expect(instance.mcps.size).toBeGreaterThan(0)
+    for (const cfg of instance.mcps.values()) expect(typeof cfg.disabled).toBe("boolean")
+    expect(instance.commands.has("fd-task")).toBe(true)
+    expect(instance.commands.get("fd-task")?.description).toBeTruthy()
+    expect(instance.skills.size).toBeGreaterThan(0)
+    for (const skill of instance.skills.values()) expect(skill.path.endsWith("SKILL.md")).toBe(true)
+    expect(instance.toolHooks.before).toHaveLength(1)
+    expect(instance.toolHooks.after).toHaveLength(1)
+    await instance.cleanup()
   })
 
   it("registers the surviving core tools", async () => {
-    const client = createMockClient()
-    const instance = await loadPlugin(client)
+    const instance = await setupPlugin(dir)
 
-    const toolNames = Object.keys(instance.tool ?? {})
+    const toolNames = [...instance.tools.keys()]
     const expected = [
       "planning-state",
       "codebase-state",
@@ -110,60 +98,83 @@ describe("plugin entry", () => {
     for (const name of expected) {
       expect(toolNames).toContain(name)
     }
+    await instance.cleanup()
   })
 
   it("does not register removed tools", async () => {
-    const client = createMockClient()
-    const instance = await loadPlugin(client)
+    const instance = await setupPlugin(dir)
 
-    const toolNames = Object.keys(instance.tool ?? {})
+    const toolNames = [...instance.tools.keys()]
     expect(toolNames).not.toContain("delegate")
     expect(toolNames).not.toContain("run-pipeline")
     expect(toolNames).not.toContain("council")
     expect(toolNames).not.toContain("decision-trace")
     expect(toolNames).not.toContain("reflect")
+    await instance.cleanup()
+  })
+
+  it("expands $ARGUMENTS in command templates and prompts the session", async () => {
+    const instance = await setupPlugin(dir)
+
+    await instance.commands.get("fd-task")!.execute({
+      sessionID: "sess-1",
+      prompt: { text: "add caching" },
+      delivery: "steer",
+    } as never)
+
+    expect(instance.prompts).toHaveLength(1)
+    const sent = instance.prompts[0] as { sessionID: string; text: string; delivery: string }
+    expect(sent.sessionID).toBe("sess-1")
+    expect(sent.delivery).toBe("steer")
+    expect(sent.text).toContain("add caching")
+    expect(sent.text).not.toContain("$ARGUMENTS")
+    await instance.cleanup()
   })
 
   it("calls sessionStartHook on session.created events", async () => {
-    const client = createMockClient()
-    const instance = await loadPlugin(client)
+    const instance = await setupPlugin(dir)
 
     let threw: unknown = null
     try {
-      await instance.event?.({ event: { type: "session.created", properties: { info: { id: "sess-1" } } } })
+      await instance.emit({ type: "session.created", data: { info: { id: "sess-1" } } })
     } catch (err) {
       threw = err
     }
     expect(threw).toBeNull()
+    await instance.cleanup()
   })
 
-  it("emits a minimal completion log from tool.execute.after", async () => {
-    const client = createMockClient()
-    const instance = await loadPlugin(client)
+  it("emits a minimal completion log from execute.after", async () => {
+    const instance = await setupPlugin(dir)
 
-    const toolInput = { tool: "read", sessionID: "sess-1", args: { filePath: "x.ts" } }
-    await instance["tool.execute.after"]?.(toolInput, { args: { filePath: "x.ts" } })
+    await instance.runAfter({
+      ...toolEvent("read", { filePath: "x.ts" }),
+      status: "completed",
+      result: { content: "ok" },
+    })
 
-    const logCalls = (client.app.log as any).mock.calls
-    const doneLog = logCalls.find((call: any) => call[0]?.body?.message?.includes("[tool] done"))
+    const doneLog = readLog(dir)
+      .split("\n")
+      .find((line) => line.includes("[tool] done"))
     expect(doneLog).toBeDefined()
-    expect(doneLog[0].body.message).toMatch(/tool=read/)
-    expect(doneLog[0].body.message).toMatch(/session=sess-1/)
+    expect(doneLog).toMatch(/tool=read/)
+    expect(doneLog).toMatch(/session=sess-1/)
+    await instance.cleanup()
   })
 
-  it("does not attach a flowdeck routing hint in tool.execute.before", async () => {
-    const client = createMockClient()
-    const instance = await loadPlugin(client)
+  it("does not attach a flowdeck routing hint in execute.before", async () => {
+    const instance = await setupPlugin(dir)
 
-    const toolInput: any = { tool: "read", sessionID: "sess-1", args: { filePath: "x.ts" } }
+    const event: { metadata?: { flowdeckRouting?: unknown } } = beforeEvent("read", { filePath: "x.ts" })
     let threw: unknown = null
     try {
-      await instance["tool.execute.before"]?.(toolInput, { args: { filePath: "x.ts" } })
+      await instance.runBefore(event as never)
     } catch (err) {
       threw = err
     }
     expect(threw).toBeNull()
-    expect(toolInput.metadata?.flowdeckRouting).toBeUndefined()
+    expect(event.metadata?.flowdeckRouting).toBeUndefined()
+    await instance.cleanup()
   })
 })
 
@@ -189,43 +200,50 @@ describe("plugin entry: sessionEventsHook wiring (bug 3a)", () => {
   })
 
   it("writes a flowdeck.log entry on session.idle events", async () => {
-    const client = createMockClient()
-    const instance = (await plugin({ directory: dir, client } as any, {})) as unknown as TestHooks
+    const instance = await setupPlugin(dir)
 
-    await instance.event?.({ event: { type: "session.idle", properties: { sessionID: "sess-idle" } } })
+    await instance.emit({ type: "session.idle", data: { sessionID: "sess-idle" } })
 
-    const logPath = join(dir, ".opencode", "flowdeck.log")
-    expect(existsSync(logPath)).toBe(true)
-    const content = readFileSync(logPath, "utf-8")
-    expect(content).toContain('"event":"idle"')
+    expect(readLog(dir)).toContain('"event":"idle"')
+    await instance.cleanup()
   })
 
-  it("writes a flowdeck.log entry on session.error events", async () => {
-    const client = createMockClient()
-    const instance = (await plugin({ directory: dir, client } as any, {})) as unknown as TestHooks
+  it("writes a flowdeck.log entry on session.execution.failed events", async () => {
+    const instance = await setupPlugin(dir)
 
-    await instance.event?.({ event: { type: "session.error", properties: { sessionID: "sess-err" } } })
+    await instance.emit({ type: "session.execution.failed", data: { sessionID: "sess-err", error: {} } })
 
-    const logPath = join(dir, ".opencode", "flowdeck.log")
-    expect(existsSync(logPath)).toBe(true)
-    const content = readFileSync(logPath, "utf-8")
-    expect(content).toContain('"event":"error"')
+    expect(readLog(dir)).toContain('"event":"error"')
+    await instance.cleanup()
   })
 
   it("session.idle clears the per-session write counter", async () => {
     const { recordWrite, getWriteCount, clearWriteCounter } = await import("@/hooks/tool-guard")
-    const client = createMockClient()
-    const instance = (await plugin({ directory: dir, client } as any, {})) as unknown as TestHooks
+    const instance = await setupPlugin(dir)
 
     const sessionID = "sess-clear"
     recordWrite(sessionID, "/tmp/a.ts")
     recordWrite(sessionID, "/tmp/b.ts")
     expect(getWriteCount(sessionID)).toBe(2)
 
-    await instance.event?.({ event: { type: "session.idle", properties: { sessionID } } })
+    await instance.emit({ type: "session.idle", data: { sessionID } })
 
     expect(getWriteCount(sessionID)).toBe(0)
     clearWriteCounter(sessionID)
+    await instance.cleanup()
+  })
+
+  it("cleanup stops the event subscription", async () => {
+    const instance = await setupPlugin(dir)
+    await instance.cleanup()
+
+    // After abort, the subscribe loop has exited; nothing consumes emitted events.
+    const raced = await Promise.race([
+      instance.emit({ type: "session.idle", data: { sessionID: "after-cleanup" } }).then(() => "consumed"),
+      new Promise<string>((resolve) => setTimeout(() => resolve("ignored"), 50)),
+    ])
+    expect(raced).toBe("ignored")
+    expect(readLog(dir)).not.toContain('"event":"idle"')
   })
 })
 
@@ -252,18 +270,30 @@ describe("plugin entry: toolGuardHook wiring (bug 3b)", () => {
   })
 
   it("blocks a write in discuss phase when FLOWDECK_TOOL_GUARD_ENABLED=on", async () => {
-    const client = createMockClient()
-    const instance = (await plugin({ directory: dir, client } as any, {})) as unknown as TestHooks
-
-    const toolInput: any = { tool: "write", sessionID: "primary", args: { filePath: "src/x.ts" } }
+    const instance = await setupPlugin(dir)
 
     let caught: Error | null = null
     try {
-      await instance["tool.execute.before"]?.(toolInput, { args: { filePath: "src/x.ts" } })
+      await instance.runBefore(beforeEvent("write", { filePath: "src/x.ts" }, "primary"))
     } catch (err) {
       caught = err as Error
     }
     expect(caught).not.toBeNull()
     expect(caught!.message).toMatch(/blocked in phase 1/)
+    await instance.cleanup()
+  })
+
+  it("enforces the agent contract using the V2 event agent", async () => {
+    const instance = await setupPlugin(dir)
+
+    let caught: Error | null = null
+    try {
+      await instance.runBefore(beforeEvent("write", { filePath: "src/x.ts" }, "primary", "orchestrator"))
+    } catch (err) {
+      caught = err as Error
+    }
+    expect(caught).not.toBeNull()
+    expect(caught!.message).toMatch(/tool-not-in-contract/)
+    await instance.cleanup()
   })
 })

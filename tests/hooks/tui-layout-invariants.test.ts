@@ -7,16 +7,17 @@
  * to overwrite the fixed input/composer area at the bottom of the screen.
  *
  * These tests enforce the invariant: all observable output from the plugin
- * must go through client.app.log(), never through console.* or process.std*.
+ * must go to the .opencode/flowdeck.log file, never through console.* or process.std*.
  *
  * Tests also confirm no new tool was introduced to work around the issue.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import { mkdirSync, writeFileSync, rmSync } from "fs"
 import { join } from "path"
 import { planningDir } from "@/tools/planning-state-lib"
 import { tmpdir } from "os"
+import { setupPlugin } from "../helpers/plugin-context"
 
 // ── stdout/stderr capture helpers ─────────────────────────────────────────
 
@@ -361,27 +362,11 @@ describe("notifications — no stdout writes (TUI safe)", () => {
 
 describe("architectural invariant — no new log-management tool introduced", () => {
   it("existing tool set does not include a new log or tui-layout management tool", async () => {
-    const { default: plugin } = await import("@/index")
-    const mockClient: any = {
-      app: { log: vi.fn().mockResolvedValue(undefined) },
-      session: {
-        create: vi.fn(),
-        prompt: vi.fn(),
-        abort: vi.fn(),
-      },
-    }
-    const mockInput: any = {
-      directory: join(tmpdir(), "no-new-tool-test"),
-      client: mockClient,
-      worktree: "",
-      project: {},
-      experimental_workspace: { register: () => {} },
-      serverUrl: new URL("http://localhost"),
-      $: {},
-    }
-    const result = await plugin(mockInput, {})
+    const dir = join(tmpdir(), "no-new-tool-test")
+    mkdirSync(dir, { recursive: true })
+    const instance = await setupPlugin(dir)
 
-    const toolNames = Object.keys((result as any).tool ?? {})
+    const toolNames = [...instance.tools.keys()]
 
     // Verify the tool set does not contain any new log/tui-management tool
     const suspectTools = toolNames.filter(
@@ -393,31 +378,19 @@ describe("architectural invariant — no new log-management tool introduced", ()
         t.includes("activity-reporter"),
     )
     expect(suspectTools).toHaveLength(0)
+    await instance.cleanup()
+    rmSync(dir, { recursive: true, force: true })
   })
 
   it("removed run-pipeline tool stays absent", async () => {
-    const { default: plugin } = await import("@/index")
-    const mockClient: any = {
-      app: { log: vi.fn().mockResolvedValue(undefined) },
-      session: {
-        create: vi.fn(),
-        prompt: vi.fn(),
-        abort: vi.fn(),
-      },
-    }
-    const mockInput: any = {
-      directory: join(tmpdir(), "tool-present-test"),
-      client: mockClient,
-      worktree: "",
-      project: {},
-      experimental_workspace: { register: () => {} },
-      serverUrl: new URL("http://localhost"),
-      $: {},
-    }
-    const result = await plugin(mockInput, {})
+    const dir = join(tmpdir(), "tool-present-test")
+    mkdirSync(dir, { recursive: true })
+    const instance = await setupPlugin(dir)
 
-    const toolNames = Object.keys((result as any).tool ?? {})
+    const toolNames = [...instance.tools.keys()]
     expect(toolNames).not.toContain("delegate")
     expect(toolNames).not.toContain("run-pipeline")
+    await instance.cleanup()
+    rmSync(dir, { recursive: true, force: true })
   })
 })

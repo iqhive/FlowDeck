@@ -15,7 +15,7 @@
  * the right guidance when they actually need it.
  */
 
-import { tool, type ToolDefinition } from "@opencode-ai/plugin"
+import { tool, type ToolDefinition } from "../tool-definition"
 import { existsSync, readFileSync } from "fs"
 import { join, dirname } from "path"
 import { fileURLToPath } from "url"

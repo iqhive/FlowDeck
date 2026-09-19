@@ -36,10 +36,10 @@ const cfg = JSON.parse(readFileSync("${OPENCODE_JSON}", "utf-8"));
 let changed = false;
 
 // Remove from plugin list
-if (Array.isArray(cfg.plugin)) {
-  const before = cfg.plugin.length;
-  cfg.plugin = cfg.plugin.filter(p => p !== "@dv.nghiem/flowdeck" && !p.startsWith("@dv.nghiem/flowdeck@"));
-  if (cfg.plugin.length < before) changed = true;
+if (Array.isArray(cfg.plugins)) {
+  const before = cfg.plugins.length;
+  cfg.plugins = cfg.plugins.filter(p => p !== "@dv.nghiem/flowdeck" && !p.startsWith("@dv.nghiem/flowdeck@"));
+  if (cfg.plugins.length < before) changed = true;
 }
 
 // Remove default_agent if it points to orchestrator

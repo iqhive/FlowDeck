@@ -1,4 +1,4 @@
-import { tool, type ToolDefinition } from "@opencode-ai/plugin"
+import { tool, type ToolDefinition } from "../tool-definition"
 import { execFileSync, execSync } from "node:child_process"
 import { resolve as pathResolve, sep } from "path"
 import { existsSync, statSync, readdirSync } from "fs"

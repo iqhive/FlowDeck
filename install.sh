@@ -158,10 +158,10 @@ let cfg = {};
 if (existsSync(configFile)) {
   try { cfg = JSON.parse(readFileSync(configFile, "utf-8")); } catch {}
 }
-if (!Array.isArray(cfg.plugin)) cfg.plugin = [];
-const already = cfg.plugin.some(p => p === "flowdeck" || String(p).startsWith("@dv.nghiem/flowdeck"));
+if (!Array.isArray(cfg.plugins)) cfg.plugins = [];
+const already = cfg.plugins.some(p => p === "flowdeck" || String(p).startsWith("@dv.nghiem/flowdeck"));
 if (!already) {
-  cfg.plugin.push("@dv.nghiem/flowdeck");
+  cfg.plugins.push("@dv.nghiem/flowdeck");
 }
 if (!cfg.default_agent) {
   cfg.default_agent = "orchestrator";

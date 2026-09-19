@@ -1,14 +1,14 @@
 {
   "name": "@dv.nghiem/flowdeck",
-  "version": "0.7.0",
+  "version": "2.0.0",
   "description": "FlowDeck — structured planning and execution workflows for OpenCode",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./src/index.ts",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./src/index.ts"
     }
   },
   "bin": {
@@ -17,15 +17,13 @@
   "files": [
     "dist",
     "bin",
-    "src/commands",
-    "src/rules",
-    "src/skills",
+    "src",
     "docs",
     "postinstall.mjs"
   ],
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "bun build src/index.ts --outdir dist --target node --format esm --external @opencode-ai/plugin --external @opencode-ai/sdk && tsc --emitDeclarationOnly --project tsconfig.build.json",
+    "build": "bun build src/index.ts --outdir dist --target node --format esm --external @opencode/plugin --external zod && tsc --emitDeclarationOnly --project tsconfig.build.json",
     "build:fdx": "cargo install --path crates/fdx --quiet",
     "check:fdx": "fdx --version",
     "postinstall": "node postinstall.mjs",
@@ -53,7 +51,8 @@
   },
   "homepage": "https://github.com/DVNghiem/FlowDeck#readme",
   "dependencies": {
-    "@opencode-ai/plugin": "^1.17.3"
+    "@opencode/plugin": "^2.0.9",
+    "zod": "^4.1.8"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",
@@ -61,8 +60,5 @@
     "ejs": "^6.0.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"
-  },
-  "peerDependencies": {
-    "@opencode-ai/sdk": "^1.17.3"
   }
 }

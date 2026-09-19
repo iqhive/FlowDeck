@@ -6,14 +6,20 @@ FlowDeck integrates with OpenCode as a plugin. This page explains how the plugin
 
 ## Plugin Registration
 
-FlowDeck uses the `@opencode-ai/plugin` package to register itself with OpenCode. After running `npm install @dv.nghiem/flowdeck`, the `postinstall` script (`postinstall.mjs`) automatically:
+FlowDeck uses the OpenCode V2 `@opencode/plugin` package (`Plugin.define`) to register itself with OpenCode. The simplest way to install it is from Git with the OpenCode CLI:
+
+```sh
+opencode plugin add github:iqhive/FlowDeck#v2.0.0
+```
+
+which adds `"github:iqhive/FlowDeck#v2.0.0"` to the `plugins` array in `opencode.json`. Alternatively, after running `npm install @dv.nghiem/flowdeck`, the `postinstall` script (`postinstall.mjs`) automatically:
 
 1. Reads the OpenCode global config at `~/.config/opencode/opencode.json` (or `$OPENCODE_CONFIG_DIR/opencode.json`)
-2. Adds `"@dv.nghiem/flowdeck"` to the `plugin` array if not already present
+2. Adds `"@dv.nghiem/flowdeck"` to the `plugins` array if not already present
 3. Sets `"default_agent": "orchestrator"` if not already set
 4. Writes the updated config back to disk
 
-OpenCode loads all plugins listed in the `plugin` array on startup.
+OpenCode loads all plugins listed in the `plugins` array on startup.
 
 ---
 
@@ -88,8 +94,8 @@ After installation, your `opencode.json` looks like:
 
 ```json
 {
-  "plugin": [
-    "@dv.nghiem/flowdeck"
+  "plugins": [
+    "github:iqhive/FlowDeck#v2.0.0"
   ],
   "default_agent": "orchestrator"
 }

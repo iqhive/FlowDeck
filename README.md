@@ -30,13 +30,29 @@ FlowDeck adds a structured, multi-agent development workflow to OpenCode. It coo
 
 ## Quick Install
 
-### Method 1: curl (recommended)
+Requires OpenCode v2 (the plugin is built on the `@opencode/plugin` V2 API).
+
+### Method 1: OpenCode plugin CLI (recommended)
+
+```bash
+opencode plugin add github:iqhive/FlowDeck#v2.0.0
+```
+
+Or add it to `opencode.json` directly:
+
+```json
+{
+  "plugins": ["github:iqhive/FlowDeck#v2.0.0"]
+}
+```
+
+### Method 2: curl
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DVNghiem/flowdeck/main/install.sh | bash
 ```
 
-### Method 2: npx (no git required)
+### Method 3: npx (no git required)
 
 ```bash
 npx @dv.nghiem/flowdeck install

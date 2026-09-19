@@ -1,4 +1,16 @@
-import type { AgentConfig } from '@opencode-ai/sdk/v2';
+/** OpenCode V1-style agent config; converted to V2 `Agent.Info` in `src/index.ts`. */
+export interface AgentConfig {
+  model?: string;
+  variant?: string;
+  temperature?: number;
+  top_p?: number;
+  prompt?: string;
+  description?: string;
+  mode?: 'subagent' | 'primary' | 'all';
+  hidden?: boolean;
+  color?: string;
+  steps?: number;
+}
 
 export interface AgentDefinition {
   name: string;

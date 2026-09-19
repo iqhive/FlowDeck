@@ -382,13 +382,13 @@ async function main() {
     try { cfg = JSON.parse(readFileSync(configFile, "utf-8")); } catch { /* ignore */ }
   }
 
-  if (!Array.isArray(cfg.plugin)) cfg.plugin = [];
-  const already = cfg.plugin.some(
+  if (!Array.isArray(cfg.plugins)) cfg.plugins = [];
+  const already = cfg.plugins.some(
     (p) => p === "@dv.nghiem/flowdeck" || String(p).startsWith("@dv.nghiem/flowdeck@")
   );
   if (!already) {
-    cfg.plugin.push("@dv.nghiem/flowdeck");
-    console.log(`✓ Added @dv.nghiem/flowdeck to plugin list`);
+    cfg.plugins.push("@dv.nghiem/flowdeck");
+    console.log(`✓ Added @dv.nghiem/flowdeck to plugins list`);
   } else {
     console.log(`✓ Plugin already registered`);
   }
