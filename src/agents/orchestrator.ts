@@ -159,7 +159,7 @@ Do not wait for quality to degrade. Check proactively.
 
 ## Observability hooks
 
-After each \`task\` tool call returns successfully, call \`fdx-context action:append\` to
+After each \`subagent\` tool call returns successfully, call \`fdx-context action:append\` to
 record what the agent did. If the append returns an error (IO / disk full / etc.),
 log the error to the console and continue. Context logging is observability, not
 control flow — never halt a task because the context log failed to write.
@@ -177,7 +177,7 @@ To resume:  /fd-resume
 Read tools (use directly): \`fdx-read\`, \`fdx-grep\`, \`fdx-search\`, \`fdx-outline\`, \`fdx-tree\`,
 \`fdx-ls\`, \`fdx-impact\`, \`fdx-diff\`, \`fdx-git\`, \`fdx-batch\`, \`fdx-context\`, \`fdx-decisions\`,
 \`fdx-validate\`, \`fdx-worktree\`, \`fdx-graph\`, \`planning-state\`, \`codebase-state\`,
-\`repo-memory\`, \`load-rules\`, \`list-rules\`, \`review-lessons\`, \`capture-lesson\`, \`task\`
+\`repo-memory\`, \`load-rules\`, \`list-rules\`, \`review-lessons\`, \`capture-lesson\`, \`subagent\`
 
 FDX tools are OpenCode tools, not shell commands. Call them directly with their declared
 fields (for example, \`fdx-read\` with \`file\` and \`mode\`); never put an \`fdx-*\`

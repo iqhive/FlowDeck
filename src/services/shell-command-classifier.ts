@@ -92,7 +92,7 @@ const ALWAYS_MUTATING: ReadonlySet<string> = new Set([
 
 /** Commands that are read-only when used without mutating flags. */
 const ALWAYS_READ_ONLY: ReadonlySet<string> = new Set([
-  "ls", "pwd", "echo", "printf", "true", "false", ":",
+  "ls", "pwd", "cd", "echo", "printf", "true", "false", ":",
   "which", "type", "hash", "compgen", "complete",
   "head", "tail", "cat", "less", "more", "view", "tac", "rev",
   "wc", "file", "stat", "du", "df", "tree",
@@ -138,7 +138,14 @@ const GIT_READ_ONLY_SUBCOMMANDS: ReadonlySet<string> = new Set([
   "rev-parse", "rev-list", "describe",
   "reflog", "shortlog",
   "grep",
+  "cat-file", "name-rev", "merge-base", "for-each-ref", "show-ref", "show-branch",
+  "diff-tree", "diff-index", "diff-files", "whatchanged", "range-diff", "cherry",
+  "check-ignore", "check-attr", "count-objects", "var", "version", "--version", "help",
+  "verify-commit", "verify-tag",
 ])
+
+/** Global `git` options that take a separate argument (`git -C <dir> status`). */
+const GIT_GLOBAL_OPTIONS_WITH_ARG: ReadonlySet<string> = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace"])
 
 /**
  * `rtk` (Rust Token Killer) is a transparent output-compressing proxy: `rtk <cmd> ...`
@@ -337,13 +344,10 @@ function hasCommandSubstitution(command: string): boolean {
 function classifyGitInvocation(tokens: ReadonlyArray<string>): ShellCategory {
   if (tokens.length < 2) return "mutating"
   let i = 1
-  // Skip global short flags (clustered, no argument).
-  while (i < tokens.length && /^-[A-Za-z]+$/.test(tokens[i])) {
-    i++
-  }
-  // Skip global long flags that take an argument.
-  while (i < tokens.length && (tokens[i] === "-C" || tokens[i] === "--git-dir" || tokens[i] === "--work-tree")) {
-    i += 2
+  // Skip global options (`-C <dir>`, `-c k=v`, `--git-dir=<d>`, `--no-pager`, `-P`, ...)
+  // up to the subcommand.
+  while (i < tokens.length && tokens[i].startsWith("-") && tokens[i] !== "--version") {
+    i += GIT_GLOBAL_OPTIONS_WITH_ARG.has(tokens[i]) ? 2 : 1
   }
   if (i >= tokens.length) return "mutating"
   const sub = tokens[i]
@@ -354,24 +358,11 @@ function classifyGitInvocation(tokens: ReadonlyArray<string>): ShellCategory {
     }
     return "mutating"
   }
-  // Walk remaining args for mutating flags.
-  for (let j = i + 1; j < tokens.length; j++) {
-    const arg = tokens[j]
-    if (!arg.startsWith("-")) continue
-    if (arg === "--set" || arg === "--unset" || arg === "--add" || arg === "--replace-all" || arg === "--rename-section" || arg === "--remove-section") {
-      return "mutating"
-    }
-    if (arg === "-d" || arg === "-D" || arg === "-m" || arg === "-M" || arg === "-c" || arg === "-C") {
-      return "mutating"
-    }
-    if (arg === "-f") return "mutating"
-  }
-  // Positionals after a read-only subcommand are refs / paths / patterns
-  // (e.g. `git show HEAD`, `git blame README.md`, `git diff --stat HEAD~1`,
-  // `git rev-parse HEAD`, `git rev-list HEAD`, `git grep pattern`). These
-  // are inspection arguments, not mutations. Mutating subcommands
-  // (commit/push/checkout/branch/tag/etc.) are rejected earlier because
-  // they're not in GIT_READ_ONLY_SUBCOMMANDS.
+  // Flags and positionals after a read-only subcommand are inspection options,
+  // refs, paths or patterns (e.g. `git show HEAD`, `git blame -C README.md`,
+  // `git diff -M --stat HEAD~1`, `git rev-parse HEAD`, `git grep pattern`).
+  // Subcommands with write-capable flags or positionals (branch/tag/config/
+  // stash/remote/worktree) are not in GIT_READ_ONLY_SUBCOMMANDS at all.
   return "read"
 }
 
