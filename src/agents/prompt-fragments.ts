@@ -45,12 +45,12 @@ export const TOKEN_OPTIMIZATION = `## Token Optimization
 - To search across the codebase: use \`fdx-graph action:query\` for structural
   lookups (a symbol's callers, callees, imports) and \`fdx-graph action:impact\`
   for blast radius before an edit. Args are \`target\` and \`target2\` only —
-  there is no depth or project-root argument. Otherwise \`fdx-grep\` — not bash
+  there is no depth or project-root argument. Otherwise \`fdx-grep\` — not shell
   find/grep loops.
 - Use read-only graph actions only. The orchestrator owns \`action:build\`; if a
   graph call reports "another build is in progress", that is NOT an fdx failure
   — retry, do not fall back to grep.
-- Never use \`bash\` just to read a file.
+- Never use \`shell\` just to read a file.
 - Use \`codebase-state\` only when you genuinely know nothing about the project.
 - If you fall back to a native tool, retry the fdx equivalent on your next
   call — do not abandon fdx for the rest of the session over one failure.

@@ -278,7 +278,7 @@ After the user confirms the plan, persist it with a single call to the \`plannin
 
 The tool resolves the canonical path (\`~/.fd-plan/<slug>/<topic>/plan.md\`), creates the directory if needed, writes the file, and updates \`STATE.md\`'s \`plan_file\` and \`topic\` to point at it. The tool returns the resolved path — that is the only path that should ever contain a plan.md.
 
-**Do not use raw file-write tools (\`write\`, \`write_file\`, \`edit\`, \`bash\` redirection, etc.) to save the plan.** Direct writes land in the project root and break STATE.md resolution. Always go through \`planning-state\`.
+**Do not use raw file-write tools (\`write\`, \`write_file\`, \`edit\`, \`shell\` redirection, etc.) to save the plan.** Direct writes land in the project root and break STATE.md resolution. Always go through \`planning-state\`.
 
 ## Preferred Tools
 

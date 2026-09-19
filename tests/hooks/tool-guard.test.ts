@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
-import { toolGuardHook, clearWriteCounter, getWriteCount, clearToolGuardDecisions, getRecentToolGuardDecisions } from "@/hooks/tool-guard"
+import { toolGuardHook, isBlocked, normalizeToolName, clearWriteCounter, getWriteCount, clearToolGuardDecisions, getRecentToolGuardDecisions } from "@/hooks/tool-guard"
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "fs"
 import { join } from "path"
 import { planningDir } from "@/tools/planning-state-lib"
@@ -322,5 +322,27 @@ describe("toolGuardHook - Worker tool permissions", () => {
     const input = { tool: "write", sessionID: TEST_SESSION }
     const output = { args: { filePath: "src/index.ts" } }
     await toolGuardHook(ctx, input, output)
+  })
+})
+
+describe("tool guard: V1 → V2 tool name normalization", () => {
+  it("maps legacy bash/task names to shell/subagent and leaves others untouched", () => {
+    expect(normalizeToolName("bash")).toBe("shell")
+    expect(normalizeToolName("task")).toBe("subagent")
+    expect(normalizeToolName("shell")).toBe("shell")
+    expect(normalizeToolName("read")).toBe("read")
+  })
+
+  it("blocks destructive commands under both the legacy and V2 shell tool names", () => {
+    expect(isBlocked("shell", { command: "rm -rf /" })).toBeTruthy()
+    expect(isBlocked("bash", { command: "rm -rf /" })).toBeTruthy()
+    expect(isBlocked("shell", { command: "rtk read ~/.fd-plan/qdns/checkpoint.json" })).toBeNull()
+  })
+
+  it("does not raise tool-not-in-contract for a legacy 'task' call by the orchestrator", async () => {
+    const ctx = { directory: TMP, agent: "orchestrator" }
+    await expect(
+      toolGuardHook(ctx, { tool: "task", sessionID: TEST_SESSION }, { args: { prompt: "x" } }),
+    ).resolves.toBeUndefined()
   })
 })

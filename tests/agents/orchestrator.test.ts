@@ -67,8 +67,8 @@ describe("orchestrator prompt: pipeline", () => {
     expect(prompt).toMatch(/log reason for skipping fd-review and fd-verify/)
   })
 
-  it("pipeline says to call task tool immediately after routing", () => {
-    expect(prompt).toMatch(/Call `task` tool immediately/)
+  it("pipeline says to call subagent tool immediately after routing", () => {
+    expect(prompt).toMatch(/Call `subagent` tool immediately/)
   })
 })
 
@@ -216,16 +216,16 @@ describe("orchestrator prompt: allowed vs forbidden tools", () => {
     expect(prompt).toContain("capture-lesson")
   })
 
-  it("allows the task tool for delegation", () => {
-    expect(prompt).toContain("`task`")
+  it("allows the subagent tool for delegation", () => {
+    expect(prompt).toContain("`subagent`")
   })
 
   it("allows read-only shell inspection", () => {
-    expect(prompt).toMatch(/Shell read-only via bash: `ls`, `cat`, `find`, `git status`, `git log` — allowed/)
+    expect(prompt).toMatch(/Shell read-only via the `shell` tool: `ls`, `cat`, `find`, `git status`, `git log` — allowed/)
   })
 
-  it("forbids mutating bash", () => {
-    expect(prompt).toContain("Mutating bash: NOT allowed (delegate to subagents)")
+  it("forbids mutating shell", () => {
+    expect(prompt).toContain("Mutating shell: NOT allowed (delegate to subagents)")
   })
 })
 
@@ -296,9 +296,9 @@ describe("orchestrator prompt: handoff protocol", () => {
     expect(prompt).not.toMatch(/delegate\(/)
   })
 
-  it("instructs the orchestrator to call the task tool for handoff", () => {
-    expect(prompt).toMatch(/`task` tool/)
-    expect(prompt).toMatch(/Call `task` tool immediately/)
+  it("instructs the orchestrator to call the subagent tool for handoff", () => {
+    expect(prompt).toMatch(/`subagent` tool/)
+    expect(prompt).toMatch(/Call `subagent` tool immediately/)
   })
 
   it("tells the orchestrator to mention the selected worker directly", () => {

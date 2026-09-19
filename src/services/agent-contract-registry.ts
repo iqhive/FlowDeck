@@ -54,11 +54,11 @@ const CONTRACTS: AgentContract[] = [
       "fdx-diff", "fdx-git", "fdx-batch",
       "fdx-context", "fdx-decisions", "fdx-validate", "fdx-worktree",
       "load-rules", "list-rules",
-      "task", // OpenCode native @agent delegation — REQUIRED
+      "subagent", // OpenCode native @agent delegation — REQUIRED
       "capture-lesson", "review-lessons",
     ],
     forbiddenActions: [
-      "write_file", "edit_file", "create_file", "bash", "patch", "apply_patch",
+      "write_file", "edit_file", "create_file", "shell", "patch", "apply_patch",
     ],
     escalationConditions: [
       "specialist agent fails twice",
@@ -85,7 +85,7 @@ const CONTRACTS: AgentContract[] = [
     allowedTools: ["read", "glob", "grep", ...FDX_DISCOVERY_TOOLS, "fdx-impact", "planning-state"],
     forbiddenActions: [
       "write source files",
-      "run bash commands",
+      "run shell commands",
       "edit application code",
       "implement features",
     ],
@@ -107,7 +107,7 @@ const CONTRACTS: AgentContract[] = [
     allowedTaskTypes: ["implementation", "backend", "api", "database", "service", "bugfix"],
     requiredInputs: ["PLAN.md step description", "relevant context files"],
     expectedOutputFields: ["files_modified", "summary"],
-    allowedTools: ["read", "write", "edit", "bash", "glob", "grep", ...FDX_DISCOVERY_TOOLS, "fdx-batch", "capture-lesson", "review-lessons"],
+    allowedTools: ["read", "write", "edit", "shell", "glob", "grep", ...FDX_DISCOVERY_TOOLS, "fdx-batch", "capture-lesson", "review-lessons"],
     forbiddenActions: [
       "modify frontend UI component files",
       "change CI/CD config without devops involvement",
@@ -130,7 +130,7 @@ const CONTRACTS: AgentContract[] = [
     allowedTaskTypes: ["implementation", "frontend", "ui", "component", "styling", "bugfix"],
     requiredInputs: ["PLAN.md step description", "design handoff for UI-heavy tasks"],
     expectedOutputFields: ["files_modified", "summary"],
-    allowedTools: ["read", "write", "edit", "bash", "glob", "grep", ...FDX_DISCOVERY_TOOLS, "fdx-batch", "capture-lesson", "review-lessons"],
+    allowedTools: ["read", "write", "edit", "shell", "glob", "grep", ...FDX_DISCOVERY_TOOLS, "fdx-batch", "capture-lesson", "review-lessons"],
     forbiddenActions: [
       "modify backend API files",
       "change server configuration",
@@ -153,7 +153,7 @@ const CONTRACTS: AgentContract[] = [
     allowedTaskTypes: ["implementation", "ci-cd", "deployment", "infrastructure", "operations"],
     requiredInputs: ["PLAN.md step description"],
     expectedOutputFields: ["files_modified", "summary"],
-    allowedTools: ["read", "write", "edit", "bash", "glob", "grep", ...FDX_DISCOVERY_TOOLS, "fdx-git", "fdx-lint", "fdx-test", "capture-lesson", "review-lessons"],
+    allowedTools: ["read", "write", "edit", "shell", "glob", "grep", ...FDX_DISCOVERY_TOOLS, "fdx-git", "fdx-lint", "fdx-test", "capture-lesson", "review-lessons"],
     forbiddenActions: [
       "modify application source code",
       "deploy to production without approval",
@@ -171,7 +171,7 @@ const CONTRACTS: AgentContract[] = [
     allowedTaskTypes: ["testing", "tdd", "regression", "integration-test", "unit-test"],
     requiredInputs: ["feature or step description", "relevant source files"],
     expectedOutputFields: ["test_files_written", "tests_passing", "coverage_summary"],
-    allowedTools: ["read", "write", "edit", "bash", "glob", "grep", ...FDX_DISCOVERY_TOOLS, "fdx-test", "capture-lesson", "review-lessons"],
+    allowedTools: ["read", "write", "edit", "shell", "glob", "grep", ...FDX_DISCOVERY_TOOLS, "fdx-test", "capture-lesson", "review-lessons"],
     forbiddenActions: [
       "delete failing tests to make suite pass",
       "implement application features",
@@ -261,7 +261,7 @@ const CONTRACTS: AgentContract[] = [
     requiredInputs: ["feature or system description", "existing codebase context"],
     expectedOutputFields: ["architecture_document", "adr", "api_contracts"],
     allowedTools: ["read", "write", "glob", "grep", ...FDX_DISCOVERY_TOOLS, "planning-state", "capture-lesson", "review-lessons"],
-    forbiddenActions: ["write application code", "run bash commands"],
+    forbiddenActions: ["write application code", "run shell commands"],
     escalationConditions: [
       "major architectural conflict with existing system",
       "breaking API change required",
@@ -286,7 +286,7 @@ const CONTRACTS: AgentContract[] = [
     ],
     requiredInputs: ["bug report or build error output", "stack trace, reproduction steps, or affected files"],
     expectedOutputFields: ["root_cause", "explanation", "recommended_fix"],
-    allowedTools: ["read", "write", "edit", "bash", "glob", "grep", ...FDX_DISCOVERY_TOOLS, "fdx-test", "capture-lesson", "review-lessons"],
+    allowedTools: ["read", "write", "edit", "shell", "glob", "grep", ...FDX_DISCOVERY_TOOLS, "fdx-test", "capture-lesson", "review-lessons"],
     forbiddenActions: [
       "fix behavioral bugs — diagnose and hand off to a coder",
       "change source files unrelated to the build failure",
@@ -316,7 +316,7 @@ const CONTRACTS: AgentContract[] = [
     requiredInputs: ["task description or mapping scope"],
     expectedOutputFields: ["findings", "files_analyzed", "summary"],
     allowedTools: ["read", "write", "glob", "grep", ...FDX_DISCOVERY_TOOLS, "fdx-impact", "planning-state"],
-    forbiddenActions: ["write application code", "run bash commands"],
+    forbiddenActions: ["write application code", "run shell commands"],
     escalationConditions: ["mapping scope is unclear", "evidence conflicts"],
     stopConditions: ["mapping report submitted", "assigned planning artifact updated"],
     successCriteria: ["findings cite evidence", "no application code modified"],

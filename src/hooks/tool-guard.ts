@@ -23,7 +23,17 @@ import { verifyAfterWrite } from "../services/verification-layer"
 const BLOCKED_PATTERNS = {
   read: [".env", ".pem", ".key", ".secret"],
   write: ["node_modules"],
-  bash: ["rm -rf"],
+  shell: ["rm -rf"],
+}
+
+/** OpenCode V1 tool names still emitted by older prompts, mapped to their V2 names. */
+const LEGACY_TOOL_NAMES: Record<string, string> = {
+  bash: "shell",
+  task: "subagent",
+}
+
+export function normalizeToolName(tool: string): string {
+  return LEGACY_TOOL_NAMES[tool] ?? tool
 }
 
 function getFilePath(args: any): string | undefined {
@@ -100,10 +110,10 @@ export type BlockReason = string | null
 export function isBlocked(tool: string, args: any): BlockReason {
   const filePath = getFilePath(args)
 
-  if (tool === "bash") {
+  if (normalizeToolName(tool) === "shell") {
     const cmd = args.command as string
     if (!cmd) return null
-    for (const p of BLOCKED_PATTERNS.bash) {
+    for (const p of BLOCKED_PATTERNS.shell) {
       if (cmd.includes(p)) {
         return `FLOWDECK: Command containing "${p}" is blocked.`
       }
@@ -329,7 +339,7 @@ export async function toolGuardHook(
   input: ToolGuardInput,
   output: { args: any }
 ): Promise<void> {
-  const toolName = input.tool ?? input.name ?? ""
+  const toolName = normalizeToolName(input.tool ?? input.name ?? "")
   const sessionID = input.sessionID ?? ""
   const agentName = resolveAgentName(ctx, input)
   const decision: ToolGuardDecision = { tool: toolName, allowed: true, reason: null, checks: [] }
@@ -365,7 +375,7 @@ export async function toolGuardHook(
   }
 
   // Check known dangerous tools including edit, patch, hash-edit, create, str_replace.
-  if (toolName !== "bash" && toolName !== "read" && !WRITE_TOOLS.has(toolName)) {
+  if (toolName !== "shell" && toolName !== "read" && !WRITE_TOOLS.has(toolName)) {
     decision.checks.push("no-op")
     logDecision(ctx, decision, { sessionID, agent: agentName, tool: toolName })
     return

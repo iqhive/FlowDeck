@@ -63,7 +63,7 @@ describe("TOKEN_OPTIMIZATION: content is complete", () => {
     "- To understand project structure: use `fdx-outline` or `fdx-tree`, not a",
     "- To search across the codebase: use `fdx-graph action:query` for structural",
     "- Use read-only graph actions only. The orchestrator owns `action:build`; if a",
-    "- Never use `bash` just to read a file.",
+    "- Never use `shell` just to read a file.",
     "- Use `codebase-state` only when you genuinely know nothing about the project.",
     "**Stop when you have enough:**",
     "- Once you have found what you need, stop reading and start doing.",

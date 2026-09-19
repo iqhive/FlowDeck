@@ -92,7 +92,7 @@ describe("contract registry: orchestrator tool list is intact", () => {
       "fdx-graph",
       "load-rules",
       "list-rules",
-      "task",
+      "subagent",
       "capture-lesson",
       "review-lessons",
     ]) {
@@ -102,7 +102,7 @@ describe("contract registry: orchestrator tool list is intact", () => {
 
   it("still forbids writes and shell execution", () => {
     const contract = getContract("orchestrator")!
-    for (const action of ["write_file", "edit_file", "create_file", "bash"]) {
+    for (const action of ["write_file", "edit_file", "create_file", "shell"]) {
       expect(contract.forbiddenActions).toContain(action)
     }
   })

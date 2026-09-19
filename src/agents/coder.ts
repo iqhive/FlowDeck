@@ -191,7 +191,7 @@ Prioritize infrastructure and delivery tasks:
 - Use fdx-lint to check for issues before committing (supports cargo clippy, ruff, tsc, eslint)
 - Use fdx-tree to understand project structure
 - Use fdx-test to run tests and see only failures
-- Fall back to native bash / git when fdx is unavailable
+- Fall back to the native shell tool / git when fdx is unavailable
 `;
 
 export const createBackendCoderAgent: AgentFactory = (

@@ -64,7 +64,7 @@ Do not recursively read parent directories, unrelated modules, or files not in s
 One targeted read beats three broad ones.
 
 ### Subagent instructions
-Always include in every task() call:
+Always include in every subagent() call:
 "Reuse existing utilities and patterns. Do not introduce new abstractions when an
 existing one fits. If unsure whether something exists, grep before building."
 
@@ -88,7 +88,7 @@ Pause and wait for human CONFIRM at:
 
 ## Context Packet
 
-Before every task tool call, prepend:
+Before every subagent tool call, prepend:
 \`\`\`
 ## Orchestrator Context
 Target: <file(s) and symbol(s), with line numbers>
@@ -142,7 +142,7 @@ After each stage completes, write \`~/.fd-plan/<project-slug>/checkpoint.json\`:
 
 ## Context Health
 
-After every stage transition AND after every 3 task() calls, check context health:
+After every stage transition AND after every 3 subagent() calls, check context health:
 
 If context > 40% of window → run context-steward prune (3-pass: dedup → purge errors → compress stale)
 If context > 60% of window → compact + prune, then /fd-checkpoint
@@ -183,14 +183,14 @@ FDX tools are OpenCode tools, not shell commands. Call them directly with their 
 fields (for example, \`fdx-read\` with \`file\` and \`mode\`); never put an \`fdx-*\`
 tool name or CLI flags in a Bash command.
 
-Shell read-only via bash: \`ls\`, \`cat\`, \`find\`, \`git status\`, \`git log\` — allowed.
-Mutating bash: NOT allowed (delegate to subagents). Use \`fdx-worktree\` instead of
+Shell read-only via the \`shell\` tool: \`ls\`, \`cat\`, \`find\`, \`git status\`, \`git log\` — allowed.
+Mutating shell: NOT allowed (delegate to subagents). Use \`fdx-worktree\` instead of
 raw \`git worktree\` calls — it returns a typed conflict object on merge failures.
 
 Skill loading: unrestricted. All skills available.
 Subagents are restricted to their skill set (defined in skill-registry.ts).
 If a subagent reports needing a skill outside its list, orchestrator MAY grant
-it by including the skill content directly in the task() context packet.
+it by including the skill content directly in the subagent() context packet.
 `;
 
 import { getAgentRoutes } from './index';
@@ -222,17 +222,17 @@ export function buildOrchestratorPrompt(disabledAgents?: Set<string>): string {
 ## Routing → Runtime Handoff
 
 After emitting the routing decision, the runtime performs the handoff. You MUST call
-the \`task\` tool immediately to delegate the work. Mentioning an agent in text output
-does NOT delegate anything — the task tool call is what actually triggers execution.
+the \`subagent\` tool immediately to delegate the work. Mentioning an agent in text output
+does NOT delegate anything — the subagent tool call is what actually triggers execution.
 
 Rules:
 1. Emit the routing decision block.
 2. Mention the selected worker directly — Do not report "blocked" or stop.
-3. Call \`task\` tool immediately — do NOT wait for user confirmation between the
+3. Call \`subagent\` tool immediately — do NOT wait for user confirmation between the
    routing decision and the tool call.
 4. Pass the full task description, relevant file paths, constraints, and acceptance
    criteria as the task body.
-5. After the task tool returns a result, continue supervising after it — verify the
+5. After the subagent tool returns a result, continue supervising after it — verify the
    output, re-route if needed, or escalate to the human.
 6. Never report the routing decision as your final output and stop there.
 `;
