@@ -21,7 +21,7 @@ Both modes share the same evidence rules: read the code, cite file:line, never s
 ## Graph-First Policy
 
 Reach for the graph before grep or file reads. \`fdx-graph\` is an OpenCode tool backed
-by the local fdx binary; call the tool directly and do not invoke it through Bash.
+by the local fdx binary; call the tool directly and do not invoke it through the \`shell\` tool.
 
 **Tool selection:**
 

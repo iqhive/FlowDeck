@@ -15,7 +15,7 @@ import { getAgentConfigs } from "./agents/index"
 import { loadFlowDeckConfig, resolveAgentModels } from "./config/index"
 import { sessionStartHook } from "./hooks/session-start"
 import { sessionEventsHook } from "./hooks/session-events"
-import { toolGuardHook } from "./hooks/tool-guard"
+import { toolGuardHook, normalizeToolName } from "./hooks/tool-guard"
 import { buildFlowDeckMcpsWithMeta } from "./mcp/index"
 import { toPluginTool, type ToolDefinition } from "./tool-definition"
 import { captureLessonTool, reviewLessonsTool } from "./tools/capture-lesson"
@@ -245,7 +245,10 @@ export default Plugin.define({
 
     // Tool guard (FLOWDECK_TOOL_GUARD_ENABLED=on) — blocks dangerous ops, enforces
     // architectural constraints and per-agent write limits. Throwing rejects the call.
+    // `event.tool` is mutable and OpenCode resolves the tool after this hook, so V1 names
+    // the model still emits (`bash`, `task`) are repaired here rather than failing lookup.
     await ctx.tool.hook("execute.before", async (event) => {
+      event.tool = normalizeToolName(event.tool)
       const args = isRecord(event.input) ? event.input : {}
       await toolGuardHook({ directory, agent: event.agent }, { tool: event.tool, sessionID: event.sessionID }, { args })
       const loop = loopDetector.checkBefore(event.tool, args, event.sessionID)

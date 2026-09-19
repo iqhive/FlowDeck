@@ -296,4 +296,21 @@ describe("plugin entry: toolGuardHook wiring (bug 3b)", () => {
     expect(caught!.message).toMatch(/may only write planning artifacts under ~\/\.fd-plan\//)
     await instance.cleanup()
   })
+
+  it("repairs V1 tool names on the event so OpenCode resolves the V2 tool", async () => {
+    const instance = await setupPlugin(dir)
+
+    const shell = toolEvent("bash", { command: "rtk read ~/.fd-plan/qdns/checkpoint.json" }, "primary", "orchestrator")
+    await instance.runBefore(shell as never)
+    expect(shell.tool).toBe("shell")
+
+    const delegate = toolEvent("task", { prompt: "x" }, "primary", "orchestrator")
+    await instance.runBefore(delegate as never)
+    expect(delegate.tool).toBe("subagent")
+
+    const untouched = toolEvent("read", { filePath: "src/x.ts" }, "primary", "orchestrator")
+    await instance.runBefore(untouched as never)
+    expect(untouched.tool).toBe("read")
+    await instance.cleanup()
+  })
 })

@@ -147,7 +147,7 @@ The orchestrator is restricted from using execution tools directly:
 
 **Blocked for orchestrator:**
 - Source code file writes: `write`, `create`, `edit`, `patch`, `str_replace_editor` on project files
-- Shell execution: `bash`, `execute`, `terminal`, `shell`
+- Shell execution: `shell`, `execute`, `terminal`
 - Build/test runners: `npm`, `bun`, `cargo`, `make`
 - Container/deployment: `docker`, `kubectl`, `terraform`
 

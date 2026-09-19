@@ -268,7 +268,7 @@ export const fdxDiffTool: ToolDefinition = tool({
 
 export const fdxGitTool: ToolDefinition = tool({
   description:
-    "Token-optimized git subcommands. Prefer over native git/bash for status, log, diff, " +
+    "Token-optimized git subcommands. Prefer over native git/shell for status, log, diff, " +
     "and branch operations — filters noise and caps output for token efficiency.",
   args: {
     subcommand: tool.schema.string(),
@@ -285,7 +285,7 @@ export const fdxGitTool: ToolDefinition = tool({
 
 export const fdxLsTool: ToolDefinition = tool({
   description:
-    "Compact directory listing. Prefer over native ls/bash for directory exploration — " +
+    "Compact directory listing. Prefer over native ls/shell for directory exploration — " +
     "groups directories first, caps entries, and returns structured output.",
   args: {
     path: tool.schema.string().optional(),
@@ -305,7 +305,7 @@ export const fdxLsTool: ToolDefinition = tool({
 
 export const fdxTreeTool: ToolDefinition = tool({
   description:
-    "Gitignore-aware directory tree. Prefer over native tree/bash for project structure " +
+    "Gitignore-aware directory tree. Prefer over native tree/shell for project structure " +
     "visualization — respects .gitignore, skips build artifacts, and caps node count.",
   args: {
     path: tool.schema.string().optional(),

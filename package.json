@@ -1,6 +1,6 @@
 {
   "name": "@dv.nghiem/flowdeck",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "FlowDeck — structured planning and execution workflows for OpenCode",
   "type": "module",
   "main": "./src/index.ts",

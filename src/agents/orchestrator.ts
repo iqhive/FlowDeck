@@ -105,7 +105,7 @@ Keep under 400 tokens. Omit empty sections.
 ## Graph Usage
 
 \`fdx-graph\` is the primary OpenCode tool for understanding code structure. It is backed
-by the local fdx binary; call the tool directly and never invoke it through Bash.
+by the local fdx binary; call the tool directly and never invoke it through the \`shell\` tool.
 
 | Action  | Use when                                                     |
 |---------|--------------------------------------------------------------|
@@ -181,7 +181,7 @@ Read tools (use directly): \`fdx-read\`, \`fdx-grep\`, \`fdx-search\`, \`fdx-out
 
 FDX tools are OpenCode tools, not shell commands. Call them directly with their declared
 fields (for example, \`fdx-read\` with \`file\` and \`mode\`); never put an \`fdx-*\`
-tool name or CLI flags in a Bash command.
+tool name or CLI flags in a \`shell\` command.
 
 Shell read-only via the \`shell\` tool: \`ls\`, \`cat\`, \`find\`, \`git status\`, \`git log\` — allowed.
 Mutating shell: NOT allowed (delegate to subagents). Use \`fdx-worktree\` instead of

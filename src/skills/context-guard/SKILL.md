@@ -64,7 +64,7 @@ Any pending tool whose side effects have not been verified:
 |---|---|
 | `write` | while pending verification |
 | `edit` | while pending verification |
-| `bash` | while exit code/output not yet checked |
+| `shell` | while exit code/output not yet checked |
 
 ## Guard Protocol
 
@@ -100,7 +100,7 @@ protected:
       while: "pending"
     - name: "edit"
       while: "pending"
-    - name: "bash"
+    - name: "shell"
       while: "pending"
   messages:
     - type: "user"

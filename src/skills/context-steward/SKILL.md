@@ -36,7 +36,7 @@ Everything that enters the session window:
 | Source | Typical Size | Risk Level |
 |--------|-------------|------------|
 | User prompts | Small | Low — never prune |
-| Tool results (read, edit, bash) | Variable | High — can be huge |
+| Tool results (read, edit, shell) | Variable | High — can be huge |
 | Skill loads | Medium | Medium — load once per session |
 | Rule injections | Small-Medium | Medium — stage-gated already |
 | Agent outputs | Medium | Medium — may contain plans or decisions |
@@ -165,7 +165,7 @@ Protected patterns are immune to all pruning passes.
 |---------|--------------|
 | `write` output for current file | Must verify what was written |
 | `edit` diff for current change | Must confirm diff is correct |
-| `bash` output for running command | Command may still be relevant |
+| `shell` output for running command | Command may still be relevant |
 
 **Protection rule**: If a tool operation is in-flight or its result is referenced in the next 3 turns, do not prune it. Mark it as pinned until the agent acknowledges it.
 

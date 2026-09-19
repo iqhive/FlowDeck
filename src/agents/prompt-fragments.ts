@@ -34,7 +34,7 @@ export const TOKEN_OPTIMIZATION = `## Token Optimization
 
 **Tool selection — always prefer the cheaper option:**
 - Call FDX tools directly through OpenCode using their declared fields. FDX tools are
-  not Bash commands: never put an \`fdx-*\` name or CLI flags in a shell command.
+  not shell commands: never put an \`fdx-*\` name or CLI flags in a shell command.
 - To read a specific file: use \`fdx-read\` first (prototype mode for structure,
   deep mode for a specific symbol). Fall back to \`read\`/\`read_file\` only if
   fdx errors, times out, or returns empty/wrong output.
