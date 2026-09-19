@@ -396,6 +396,33 @@ describe("classifyShellCommand: redirects and command substitution", () => {
   it("classifies backtick command substitution as mutating", () => {
     expect(cat("echo `ls`")).toBe("mutating")
   })
+  for (const cmd of [
+    "git status >/dev/null",
+    "git status > /dev/null",
+    "ls /nonexistent 2>/dev/null",
+    "ls /nonexistent 2>> /dev/null",
+    "ls &>/dev/null",
+    "ls &> /dev/null",
+    "git -C xxx/yyy status 2>&1",
+    "git status >/dev/null 2>&1",
+    "git status 2>&1 >/dev/null",
+    "cat </dev/null",
+    "ls 2>/dev/null | wc -l",
+    "ls 2>/dev/null && git status 2>/dev/null",
+  ]) {
+    it(`treats /dev/null and fd-dup redirects as read-only: ${cmd}`, () => {
+      expect(cat(cmd)).toBe("read")
+    })
+  }
+  it("still blocks writes to other /dev nodes", () => {
+    expect(cat("echo hi > /dev/sda")).toBe("mutating")
+  })
+  it("still blocks writes when only stderr goes to /dev/null", () => {
+    expect(cat("ls > /tmp/x 2>/dev/null")).toBe("mutating")
+  })
+  it("still flags reads from other /dev nodes as sensitive", () => {
+    expect(cat("cat /dev/mem")).toBe("sensitive-read")
+  })
 })
 
 // ─── Pipelines and control operators ───────────────────────────────────────

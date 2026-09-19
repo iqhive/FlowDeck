@@ -35,14 +35,14 @@ Requires OpenCode v2 (the plugin is built on the `@opencode/plugin` V2 API).
 ### Method 1: OpenCode plugin CLI (recommended)
 
 ```bash
-opencode plugin add github:iqhive/FlowDeck#v2.0.5
+opencode plugin add github:iqhive/FlowDeck#v2.0.6
 ```
 
 Or add it to `opencode.json` directly:
 
 ```json
 {
-  "plugins": ["github:iqhive/FlowDeck#v2.0.5"]
+  "plugins": ["github:iqhive/FlowDeck#v2.0.6"]
 }
 ```
 

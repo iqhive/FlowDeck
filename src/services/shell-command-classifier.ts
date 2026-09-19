@@ -330,6 +330,18 @@ function hasWriteRedirect(command: string): boolean {
   return false
 }
 
+/**
+ * Remove redirects that cannot write anything observable: any redirect to or from
+ * `/dev/null` (`>/dev/null`, `2>>/dev/null`, `&>/dev/null`, `</dev/null`) and
+ * fd duplications (`2>&1`, `>&2`). What remains is checked by the redirect and
+ * sensitive-path rules as usual.
+ */
+function stripNullRedirects(command: string): string {
+  return command
+    .replace(/(?:^|\s)(?:\d*>{1,2}|&>{1,2}|<)\s*\/dev\/null(?=\s|$|[|&;])/g, " ")
+    .replace(/(?:^|\s)\d*>&\d+(?=\s|$|[|&;])/g, " ")
+}
+
 /** Detect command substitution `$(...)` or backticks. Always mutating. */
 function hasCommandSubstitution(command: string): boolean {
   if (command.includes("$(")) return true
@@ -526,7 +538,7 @@ export function classifyShellCommand(
   if (typeof command !== "string") {
     return { category: "unknown", reason: "no command string provided", sensitiveMatches: [], head: null }
   }
-  const trimmed = command.trim()
+  const trimmed = stripNullRedirects(command.trim()).trim()
   if (trimmed.length === 0) {
     return { category: "unknown", reason: "empty command", sensitiveMatches: [], head: null }
   }
