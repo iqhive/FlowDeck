@@ -293,7 +293,7 @@ describe("plugin entry: toolGuardHook wiring (bug 3b)", () => {
       caught = err as Error
     }
     expect(caught).not.toBeNull()
-    expect(caught!.message).toMatch(/tool-not-in-contract/)
+    expect(caught!.message).toMatch(/may only write planning artifacts under ~\/\.fd-plan\//)
     await instance.cleanup()
   })
 })

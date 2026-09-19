@@ -471,3 +471,41 @@ describe("tokenize", () => {
     expect(tokenize("   \t  ")).toEqual([])
   })
 })
+
+describe("classifyShellCommand: rtk proxy wrapper", () => {
+  it("classifies `rtk read` as read-only, including FlowDeck's ~/.fd-plan/ root", () => {
+    expect(classifyShellCommand("rtk read ~/.fd-plan/qdns/checkpoint.json").category).toBe("read")
+    expect(classifyShellCommand("rtk read src/index.ts --head-lines 20").category).toBe("read")
+  })
+
+  it("inherits the wrapped command's category for passthrough subcommands", () => {
+    expect(classifyShellCommand("rtk ls src").category).toBe("read")
+    expect(classifyShellCommand("rtk grep -n foo src").category).toBe("read")
+    expect(classifyShellCommand("rtk git status").category).toBe("read")
+    expect(classifyShellCommand("rtk git commit -m x").category).toBe("mutating")
+    expect(classifyShellCommand("rtk cargo build").category).toBe("mutating")
+    expect(classifyShellCommand("rtk npm install").category).toBe("mutating")
+  })
+
+  it("classifies the command wrapped by `rtk proxy` / `rtk summary`", () => {
+    expect(classifyShellCommand("rtk proxy git log --oneline").category).toBe("read")
+    expect(classifyShellCommand("rtk proxy rm -rf dist").category).toBe("mutating")
+    expect(classifyShellCommand("rtk summary cargo test").category).toBe("mutating")
+  })
+
+  it("treats rtk meta commands as mutating", () => {
+    for (const cmd of ["rtk init -g --opencode", "rtk config set x y", "rtk trust", "rtk gain", "rtk rewrite ls"]) {
+      expect(classifyShellCommand(cmd).category).toBe("mutating")
+    }
+    expect(classifyShellCommand("rtk").category).toBe("unknown")
+  })
+})
+
+describe("classifyShellCommand: ~/.fd-plan/ planning root", () => {
+  it("allows read-only inspection of ~/.fd-plan/ but keeps other ~ paths risky", () => {
+    expect(classifyShellCommand("cat ~/.fd-plan/qdns/checkpoint.json").category).toBe("read")
+    expect(classifyShellCommand("ls ~/.fd-plan/").category).toBe("read")
+    expect(classifyShellCommand("cat ~/notes.txt").category).toBe("risky")
+    expect(classifyShellCommand("cat ~/.fd-plan/../.ssh/id_rsa").category).not.toBe("read")
+  })
+})

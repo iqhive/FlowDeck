@@ -140,6 +140,28 @@ const GIT_READ_ONLY_SUBCOMMANDS: ReadonlySet<string> = new Set([
   "grep",
 ])
 
+/**
+ * `rtk` (Rust Token Killer) is a transparent output-compressing proxy: `rtk <cmd> ...`
+ * runs `<cmd>` and filters its output, so it inherits the wrapped command's category.
+ * These are rtk's own subcommands (from `RTK_META_COMMANDS` in rtk's
+ * `src/core/constants.rs`) which do NOT wrap a user command and may write config,
+ * databases, or hooks.
+ */
+const RTK_META_COMMANDS: ReadonlySet<string> = new Set([
+  "gain", "discover", "learn", "init", "config", "recall", "run", "hook", "hook-audit",
+  "pipe", "cc-economics", "verify", "trust", "untrust", "session", "rewrite", "telemetry",
+  "smart", "deps", "json",
+])
+
+/** rtk subcommands that read files without a same-named coreutil (`rtk read` ~ `cat`). */
+const RTK_READ_ONLY_SUBCOMMANDS: ReadonlySet<string> = new Set(["read"])
+
+/** rtk subcommands that run an arbitrary wrapped command (`rtk proxy <cmd>`, `rtk summary <cmd>`). */
+const RTK_WRAPPER_SUBCOMMANDS: ReadonlySet<string> = new Set(["proxy", "summary"])
+
+/** FlowDeck's own planning root; the one `~/` location the orchestrator is expected to inspect. */
+const PLANNING_ROOT_PREFIX = "~/.fd-plan/"
+
 /** Default sensitive-path patterns. Substring match (case-insensitive). */
 const DEFAULT_SENSITIVE_PATTERNS: ReadonlyArray<string> = [
   ".env",
@@ -385,6 +407,7 @@ function hasPathTraversal(tokens: ReadonlyArray<string>): boolean {
     if (t === "..") return true
     if (t.startsWith("../") || t.startsWith("./../")) return true
     if (t.includes("/..")) return true
+    if (t.startsWith(PLANNING_ROOT_PREFIX)) continue
     if (t === "~" || t.startsWith("~/")) return true
   }
   return false
@@ -403,6 +426,24 @@ function classifySegment(segment: string): { category: ShellCategory; reason: st
       return { category: "unknown", reason: `\`${head}\` with -c hides the real command from inspection; route to a specialist`, head }
     }
     return { category: "risky", reason: `\`${head}\` is an indirection wrapper; route to a specialist for safe execution`, head }
+  }
+  if (head === "rtk") {
+    const sub = tokens[1]?.toLowerCase()
+    if (!sub) {
+      return { category: "unknown", reason: "`rtk` without a subcommand", head }
+    }
+    if (RTK_META_COMMANDS.has(sub)) {
+      return { category: "mutating", reason: `\`rtk ${sub}\` is an rtk meta command (config/hooks/telemetry), not an inspection command`, head }
+    }
+    if (RTK_READ_ONLY_SUBCOMMANDS.has(sub)) {
+      return { category: "read", reason: `\`rtk ${sub}\` reads files with rtk output compression`, head }
+    }
+    // `rtk proxy <cmd>`, `rtk summary <cmd>` and `rtk <cmd>` all run <cmd>; classify the wrapped command.
+    const wrapped = stripped.replace(RTK_WRAPPER_SUBCOMMANDS.has(sub) ? /^rtk\s+\S+\s+/i : /^rtk\s+/i, "")
+    if (wrapped === stripped) {
+      return { category: "unknown", reason: "`rtk` wrapped command could not be extracted", head }
+    }
+    return classifySegment(wrapped)
   }
   if (head === "git") {
     const cat = classifyGitInvocation(tokens)

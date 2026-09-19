@@ -26,6 +26,10 @@ export interface AgentContract {
   stopConditions: string[]
   /** Criteria for a successful run */
   successCriteria: string[]
+  /** When "read-only", `shell` calls are admitted only if the command classifies as read-only. */
+  shellPolicy?: "read-only"
+  /** When "planning", file-write tools are admitted only for paths under `~/.fd-plan/`. */
+  writeScope?: "planning"
 }
 
 const FDX_DISCOVERY_TOOLS = [
@@ -56,10 +60,16 @@ const CONTRACTS: AgentContract[] = [
       "load-rules", "list-rules",
       "subagent", // OpenCode native @agent delegation — REQUIRED
       "capture-lesson", "review-lessons",
+      "shell", // read-only inspection only (shellPolicy)
+      "write", "edit", // planning artifacts under ~/.fd-plan/ only (writeScope)
     ],
     forbiddenActions: [
-      "write_file", "edit_file", "create_file", "shell", "patch", "apply_patch",
+      "write source code (delegate to subagents)",
+      "mutating shell commands (delegate to subagents)",
+      "patch", "apply_patch",
     ],
+    shellPolicy: "read-only",
+    writeScope: "planning",
     escalationConditions: [
       "specialist agent fails twice",
       "deadlock detected",

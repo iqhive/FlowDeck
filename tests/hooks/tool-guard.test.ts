@@ -346,3 +346,46 @@ describe("tool guard: V1 → V2 tool name normalization", () => {
     ).resolves.toBeUndefined()
   })
 })
+
+describe("tool guard: orchestrator contract scope (read-only shell, ~/.fd-plan/ writes)", () => {
+  const ctx = { directory: TMP, agent: "orchestrator" }
+  const run = (tool: string, args: Record<string, unknown>) =>
+    toolGuardHook(ctx, { tool, sessionID: TEST_SESSION }, { args })
+
+  beforeEach(() => {
+    process.env.FLOWDECK_TOOL_GUARD_ENABLED = "on"
+    if (!existsSync(TMP)) mkdirSync(TMP, { recursive: true })
+    clearWriteCounter(TEST_SESSION)
+  })
+
+  afterEach(() => {
+    delete process.env.FLOWDECK_TOOL_GUARD_ENABLED
+    rmSync(TMP, { recursive: true, force: true })
+    clearWriteCounter(TEST_SESSION)
+  })
+
+  it("allows read-only shell commands, including rtk-wrapped ones", async () => {
+    await expect(run("shell", { command: "rtk read ~/.fd-plan/qdns/checkpoint.json" })).resolves.toBeUndefined()
+    await expect(run("shell", { command: "cat ~/.fd-plan/qdns/checkpoint.json" })).resolves.toBeUndefined()
+    await expect(run("shell", { command: "git status" })).resolves.toBeUndefined()
+    await expect(run("bash", { command: "ls -la src" })).resolves.toBeUndefined()
+  })
+
+  it("blocks mutating, risky and unclassifiable shell commands", async () => {
+    await expect(run("shell", { command: "git commit -m x" })).rejects.toThrow(/read-only shell/)
+    await expect(run("shell", { command: "rtk cargo build" })).rejects.toThrow(/read-only shell/)
+    await expect(run("shell", { command: "cat ~/.ssh/id_rsa" })).rejects.toThrow(/read-only shell/)
+    await expect(run("shell", { command: "some-unknown-binary --flag" })).rejects.toThrow(/read-only shell/)
+  })
+
+  it("allows writes under ~/.fd-plan/ and blocks writes elsewhere", async () => {
+    await expect(run("write", { filePath: "~/.fd-plan/qdns/checkpoint.json" })).resolves.toBeUndefined()
+    await expect(run("edit", { filePath: join(planningDir(TMP), "STATE.md") })).resolves.toBeUndefined()
+    await expect(run("write", { filePath: "src/index.ts" })).rejects.toThrow(/planning artifacts under ~\/\.fd-plan\//)
+    await expect(run("edit", { filePath: "/etc/hosts" })).rejects.toThrow(/planning artifacts under ~\/\.fd-plan\//)
+  })
+
+  it("still forbids patch tools via the contract", async () => {
+    await expect(run("patch", { filePath: "~/.fd-plan/qdns/plan.md" })).rejects.toThrow(/tool-not-in-contract/)
+  })
+})

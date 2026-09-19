@@ -100,9 +100,14 @@ describe("contract registry: orchestrator tool list is intact", () => {
     }
   })
 
-  it("still forbids writes and shell execution", () => {
+  it("admits shell/write/edit but scopes them to read-only shell and ~/.fd-plan/ writes", () => {
     const contract = getContract("orchestrator")!
-    for (const action of ["write_file", "edit_file", "create_file", "shell"]) {
+    for (const tool of ["shell", "write", "edit"]) {
+      expect(contract.allowedTools).toContain(tool)
+    }
+    expect(contract.shellPolicy).toBe("read-only")
+    expect(contract.writeScope).toBe("planning")
+    for (const action of ["patch", "apply_patch"]) {
       expect(contract.forbiddenActions).toContain(action)
     }
   })

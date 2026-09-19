@@ -10,13 +10,16 @@ const IS_ENABLED = () =>
   process.env.FLOWDECK_TOOL_GUARD_ENABLED !== "off"
 
 import { existsSync, readFileSync } from "fs"
-import { join } from "path"
+import { homedir } from "os"
+import { join, resolve, sep } from "path"
 import { codebaseDir } from "../tools/codebase-state"
 import { resolveActiveTopic, topicPlanPath, readPlanningState } from "../tools/planning-state-lib"
 import { isUiHeavyTask } from "../lib/task-routing"
 import { loadFlowDeckConfig, resolveDesignFirstConfig } from "../config"
 import type { FlowDeckConfig } from "../config/schema"
-import { validateToolAccess } from "../services/agent-validator"
+import { validateToolAccess, resolveValidatorMode } from "../services/agent-validator"
+import { getContract } from "../services/agent-contract-registry"
+import { classifyShellCommand } from "../services/shell-command-classifier"
 import { appendAuditEvent } from "../services/audit-log"
 import { verifyAfterWrite } from "../services/verification-layer"
 
@@ -65,6 +68,48 @@ const WRITE_TOOLS = new Set([
   "str-replace", "str_replace", "str_replace_editor",
   "create", "create_file",
 ])
+
+/** `~/.fd-plan/` — the only location a `writeScope: "planning"` agent may write to. */
+function isPlanningPath(filePath: string, directory: string): boolean {
+  const expanded = filePath === "~" || filePath.startsWith("~/")
+    ? join(homedir(), filePath.slice(1))
+    : filePath
+  const root = join(homedir(), ".fd-plan")
+  return resolve(directory, expanded).startsWith(root + sep)
+}
+
+/**
+ * Contract scope checks that depend on tool *arguments*, not just the tool name:
+ * read-only shell for `shellPolicy: "read-only"`, planning-only paths for
+ * `writeScope: "planning"`. Returns a block message or null.
+ */
+export function checkContractScope(
+  directory: string,
+  agent: string,
+  tool: string,
+  args: Record<string, unknown>,
+): string | null {
+  if (resolveValidatorMode(directory) === "off") return null
+  const contract = getContract(agent)
+  if (!contract) return null
+
+  if (tool === "shell" && contract.shellPolicy === "read-only") {
+    const command = typeof args.command === "string" ? args.command : ""
+    const c = classifyShellCommand(command, { workingDir: directory })
+    if (c.category !== "read") {
+      return `FLOWDECK: Agent ${agent} may only run read-only shell commands (${c.category}: ${c.reason}). Delegate mutating work to a subagent.`
+    }
+  }
+
+  if (WRITE_TOOLS.has(tool) && contract.writeScope === "planning") {
+    const filePath = getFilePath(args)
+    if (filePath && !isPlanningPath(filePath, directory)) {
+      return `FLOWDECK: Agent ${agent} may only write planning artifacts under ~/.fd-plan/ (got "${filePath}"). Delegate source changes to a subagent.`
+    }
+  }
+
+  return null
+}
 
 export function recordWrite(sessionID: string, filePath: string): void {
   const files = sessionWrittenFiles.get(sessionID) ?? new Set()
@@ -401,6 +446,15 @@ export async function toolGuardHook(
       decision.reason = msg
       logDecision(ctx, decision, { sessionID, agent: agentName, tool: toolName })
       throw new Error(msg)
+    }
+
+    const scopeBlock = checkContractScope(ctx.directory, agentName, toolName, args)
+    if (scopeBlock) {
+      decision.checks.push("contract-scope")
+      decision.allowed = false
+      decision.reason = scopeBlock
+      logDecision(ctx, decision, { sessionID, agent: agentName, tool: toolName })
+      throw new Error(scopeBlock)
     }
   }
 
