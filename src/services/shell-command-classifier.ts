@@ -144,6 +144,30 @@ const GIT_READ_ONLY_SUBCOMMANDS: ReadonlySet<string> = new Set([
   "verify-commit", "verify-tag",
 ])
 
+/**
+ * `git` subcommands that are read-only only in their list/inspect form. `branch`
+ * and `tag` list when given no positional (a positional creates); the others
+ * are read-only for the listed second-level subcommands / flags.
+ */
+const GIT_BRANCH_WRITE_FLAGS: ReadonlySet<string> = new Set([
+  "-d", "-D", "-m", "-M", "-c", "-C", "-u", "-f",
+  "--delete", "--move", "--copy", "--force", "--set-upstream-to", "--unset-upstream", "--edit-description",
+])
+const GIT_TAG_WRITE_FLAGS: ReadonlySet<string> = new Set([
+  "-d", "-a", "-s", "-u", "-f", "-m", "-F", "-e",
+  "--delete", "--annotate", "--sign", "--local-user", "--force", "--message", "--file", "--edit",
+])
+/** `branch`/`tag` list options that take a value, so the value is not a positional. */
+const GIT_BRANCH_TAG_LIST_OPTIONS_WITH_ARG: ReadonlySet<string> = new Set([
+  "--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "--sort", "--format", "--color", "--abbrev",
+])
+const GIT_LIST_FORMS: Readonly<Record<string, ReadonlySet<string>>> = {
+  stash: new Set(["list", "show"]),
+  remote: new Set(["-v", "--verbose", "show", "get-url"]),
+  worktree: new Set(["list"]),
+  submodule: new Set(["status", "summary"]),
+}
+
 /** Global `git` options that take a separate argument (`git -C <dir> status`). */
 const GIT_GLOBAL_OPTIONS_WITH_ARG: ReadonlySet<string> = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace"])
 
@@ -363,6 +387,25 @@ function classifyGitInvocation(tokens: ReadonlyArray<string>): ShellCategory {
   }
   if (i >= tokens.length) return "mutating"
   const sub = tokens[i]
+  const rest = tokens.slice(i + 1)
+  if (sub === "branch" || sub === "tag") {
+    const writeFlags = sub === "branch" ? GIT_BRANCH_WRITE_FLAGS : GIT_TAG_WRITE_FLAGS
+    if (rest.some(t => writeFlags.has(t) || t.startsWith("--set-upstream-to="))) return "mutating"
+    const positionals = rest.filter((t, k) => !t.startsWith("-") && !GIT_BRANCH_TAG_LIST_OPTIONS_WITH_ARG.has(rest[k - 1] ?? ""))
+    const listing = rest.some(t => t === "-l" || t === "--list" || t.startsWith("--list="))
+    return positionals.length === 0 || listing ? "read" : "mutating"
+  }
+  if (sub === "config") {
+    return rest.some(t => t === "-l" || t === "--list" || t.startsWith("--get")) &&
+      !rest.some(t => t === "--edit" || t === "-e" || t === "--unset" || t === "--unset-all" || t === "--add" || t === "--replace-all")
+      ? "read"
+      : "mutating"
+  }
+  const listForms = GIT_LIST_FORMS[sub]
+  if (listForms) {
+    if (sub === "remote" && rest.length === 0) return "read"
+    return rest[0] !== undefined && listForms.has(rest[0]) ? "read" : "mutating"
+  }
   if (!GIT_READ_ONLY_SUBCOMMANDS.has(sub)) {
     // Subcommand itself is mutating or risky.
     if (sub === "fetch" || sub === "pull" || sub === "push" || sub === "clone" || sub === "archive") {
@@ -374,7 +417,7 @@ function classifyGitInvocation(tokens: ReadonlyArray<string>): ShellCategory {
   // refs, paths or patterns (e.g. `git show HEAD`, `git blame -C README.md`,
   // `git diff -M --stat HEAD~1`, `git rev-parse HEAD`, `git grep pattern`).
   // Subcommands with write-capable flags or positionals (branch/tag/config/
-  // stash/remote/worktree) are not in GIT_READ_ONLY_SUBCOMMANDS at all.
+  // stash/remote/worktree) are handled above, not via GIT_READ_ONLY_SUBCOMMANDS.
   return "read"
 }
 
@@ -605,7 +648,7 @@ export function classifyShellCommand(
   if (worst === "mutating") {
     return {
       category: "mutating",
-      reason: reasons.find(r => r.includes("mutating")) ?? reasons[0] ?? "command mutates state",
+      reason: reasons.find(r => r.includes("mutat")) ?? reasons[0] ?? "command mutates state",
       sensitiveMatches,
       head,
     }

@@ -132,6 +132,27 @@ describe("classifyShellCommand: git read-only subcommands", () => {
     ["rtk git -C dir status", "rtk git -C xxx/yyy status"],
     ["cd", "cd src"],
     ["cd and git status", "cd xxx/yyy && git status"],
+    ["git branch --show-current", "git branch --show-current"],
+    ["git branch", "git branch"],
+    ["git branch -a", "git branch -a -vv"],
+    ["git branch --list pattern", "git branch --list 'feat/*'"],
+    ["git branch --merged", "git branch --merged main"],
+    ["git branch -r --contains", "git branch -r --contains HEAD"],
+    ["git tag", "git tag"],
+    ["git tag -l pattern", "git tag -l 'v*'"],
+    ["git tag --points-at", "git tag --points-at HEAD --sort=-v:refname"],
+    ["git stash list", "git stash list"],
+    ["git stash show", "git stash show -p stash@{0}"],
+    ["git remote", "git remote"],
+    ["git remote -v", "git remote -v"],
+    ["git remote get-url", "git remote get-url origin"],
+    ["git remote show", "git remote show origin"],
+    ["git worktree list", "git worktree list --porcelain"],
+    ["git config --get", "git config --get user.name"],
+    ["git config --list", "git config --list --show-origin"],
+    ["git submodule status", "git submodule status"],
+    ["user pipeline", "cd /home/iqdev && git status --short 2>/dev/null | head; echo \"\"; git branch --show-current; echo \"\"; find . -type f -not -path './git' | head -60"],
+    ["user pipeline 2", "git status --short | head -n20; echo \"\"; git branch --show-current;cat go.mod"],
   ]
   for (const [label, cmd] of gitReadOnly) {
     it(`classifies '${label}' as read`, () => {
@@ -211,7 +232,20 @@ describe("classifyShellCommand: mutating commands", () => {
     ["git -C dir commit", "git -C xxx/yyy commit -m x"],
     ["git -C dir only", "git -C xxx/yyy"],
     ["git remote add", "git remote add origin url"],
+    ["git remote set-url", "git remote set-url origin url"],
+    ["git remote rm", "git remote rm origin"],
     ["git worktree add", "git worktree add ../wt"],
+    ["git worktree remove", "git worktree remove wt"],
+    ["git branch -m", "git branch -m old new"],
+    ["git branch -u", "git branch -u origin/main"],
+    ["git branch --set-upstream-to=", "git branch --set-upstream-to=origin/main"],
+    ["git branch -f", "git branch -f main HEAD~1"],
+    ["git tag annotated", "git tag -a v1.0 -m x"],
+    ["git tag -f", "git tag -f v1.0"],
+    ["git config --get + --unset", "git config --get --unset user.name"],
+    ["git config --edit", "git config --edit"],
+    ["git stash show then pop", "git stash show && git stash pop"],
+    ["git submodule update", "git submodule update --init"],
     ["git stash push", "git stash push -m x"],
     ["git stash pop", "git stash pop"],
     ["git stash drop", "git stash drop"],
@@ -445,6 +479,11 @@ describe("classifyShellCommand: pipelines and control operators", () => {
   })
   it("classifies read-only chain `uname && date` as read", () => {
     expect(cat("uname && date")).toBe("read")
+  })
+  it("reports the mutating segment's reason, not the first segment's", () => {
+    const r = classifyShellCommand("cd src && git status && git commit -m x")
+    expect(r.category).toBe("mutating")
+    expect(r.reason).toMatch(/git command mutates repository state/)
   })
 })
 
