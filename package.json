@@ -18,15 +18,13 @@
     "dist",
     "bin",
     "src",
-    "docs",
-    "postinstall.mjs"
+    "docs"
   ],
   "scripts": {
     "clean": "rm -rf dist",
     "build": "bun build src/index.ts --outdir dist --target node --format esm --external @opencode/plugin --external zod && tsc --emitDeclarationOnly --project tsconfig.build.json",
     "build:fdx": "cargo install --path crates/fdx --quiet",
     "check:fdx": "fdx --version",
-    "postinstall": "node postinstall.mjs",
     "prepublishOnly": "bun run clean && bun run build",
     "test": "bun test",
     "typecheck": "tsc --noEmit",

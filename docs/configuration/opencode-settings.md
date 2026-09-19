@@ -12,7 +12,7 @@ FlowDeck uses the OpenCode V2 `@opencode/plugin` package (`Plugin.define`) to re
 opencode plugin add github:iqhive/FlowDeck#v2.0.0
 ```
 
-which adds `"github:iqhive/FlowDeck#v2.0.0"` to the `plugins` array in `opencode.json`. Alternatively, after running `npm install @dv.nghiem/flowdeck`, the `postinstall` script (`postinstall.mjs`) automatically:
+which adds `"github:iqhive/FlowDeck#v2.0.0"` to the `plugins` array in `opencode.json`. Alternatively, `npx @dv.nghiem/flowdeck install` (`bin/flowdeck.js`) automatically:
 
 1. Reads the OpenCode global config at `~/.config/opencode/opencode.json` (or `$OPENCODE_CONFIG_DIR/opencode.json`)
 2. Adds `"@dv.nghiem/flowdeck"` to the `plugins` array if not already present
@@ -35,7 +35,6 @@ files:
   src/rules/    — coding standards
   src/skills/   — skill definitions
   docs/         — documentation
-  postinstall.mjs — post-install registration script
 ```
 
 The npm package does **not** include `src/agents/`, `src/tools/`, `src/hooks/` (with the exception of `src/skills/`), or development files.

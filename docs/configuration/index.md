@@ -1,6 +1,6 @@
 # Configuration
 
-FlowDeck is configured via the OpenCode configuration file at `~/.config/opencode/opencode.json` (or `$OPENCODE_CONFIG_DIR/opencode.json`). This file is managed by FlowDeck's `postinstall` script — the plugin is registered automatically when you install FlowDeck.
+FlowDeck is configured via the OpenCode configuration file at `~/.config/opencode/opencode.json` (or `$OPENCODE_CONFIG_DIR/opencode.json`). The plugin is registered automatically by `opencode plugin add` or `npx @dv.nghiem/flowdeck install`.
 
 > **Note:** FlowDeck uses `opencode.json` (OpenCode's global config), not `flowdeck.json`. This page documents the schema understood by FlowDeck's plugin layer.
 
