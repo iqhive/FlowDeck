@@ -12,7 +12,7 @@ use fdx::reader::code::{
     },
 };
 
-const LANGUAGES: &[&str] = &["javascript", "typescript", "rust", "python", "java"];
+const LANGUAGES: &[&str] = &["javascript", "typescript", "rust", "python", "java", "go"];
 
 #[test]
 fn every_symbol_query_compiles() {
@@ -173,6 +173,49 @@ class Probe {
     );
 }
 
+/// Go has one call node for `free()`, `pkg.Func()` and `recv.Method()`; the
+/// selector form must be reported as qualified with its operand, and composite
+/// literals (`Foo{}` / `&pkg.Foo{}`) as constructors.
+#[test]
+fn go_call_shapes_are_distinguished() {
+    let source = r#"
+package p
+
+func run() {
+	free()
+	fmt.Println("x")
+	obj.method()
+	w := Widget{}
+	q := &other.Thing{}
+}
+"#;
+    let got = calls(source, "go", tree_sitter_go::LANGUAGE.into());
+    assert!(
+        got.contains(&(RawCallShape::Unqualified, "free".to_string())),
+        "expected unqualified `free`, got {got:?}"
+    );
+    assert!(
+        got.contains(&(RawCallShape::Qualified, "Println".to_string())),
+        "expected qualified `Println`, got {got:?}"
+    );
+    assert!(
+        got.contains(&(RawCallShape::Qualified, "method".to_string())),
+        "expected qualified `method`, got {got:?}"
+    );
+    assert!(
+        !got.contains(&(RawCallShape::Unqualified, "method".to_string())),
+        "`obj.method()` must NOT be reported as unqualified, got {got:?}"
+    );
+    assert!(
+        got.contains(&(RawCallShape::Constructor, "Widget".to_string())),
+        "expected constructor `Widget`, got {got:?}"
+    );
+    assert!(
+        got.contains(&(RawCallShape::Constructor, "Thing".to_string())),
+        "expected constructor `Thing`, got {got:?}"
+    );
+}
+
 /// Extracted import specifiers, in source order.
 fn imports(source: &str, lang: &str, language: tree_sitter::Language) -> Vec<String> {
     let tree = parse_source(source, language).expect("fixture must parse");
@@ -221,6 +264,28 @@ fn java_wildcard_imports_are_skipped() {
         tree_sitter_java::LANGUAGE.into(),
     );
     assert_eq!(got, vec!["com.other.Thing"], "got {got:?}");
+}
+
+/// Single, grouped, aliased, blank and raw-string import forms must all yield
+/// the bare path with no quotes.
+#[test]
+fn go_import_forms_are_extracted() {
+    let got = imports(
+        "package p\n\nimport \"fmt\"\n\nimport (\n\t\"strings\"\n\tyaml \"gopkg.in/yaml.v3\"\n\t_ \"embed\"\n\t`github.com/acme/app/internal/convert`\n)\n",
+        "go",
+        tree_sitter_go::LANGUAGE.into(),
+    );
+    assert_eq!(
+        got,
+        vec![
+            "fmt",
+            "strings",
+            "gopkg.in/yaml.v3",
+            "embed",
+            "github.com/acme/app/internal/convert",
+        ],
+        "got {got:?}"
+    );
 }
 
 #[test]

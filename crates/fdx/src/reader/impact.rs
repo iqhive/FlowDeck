@@ -258,10 +258,18 @@ fn extract_imports(path: &Path, source: &str, cache: &AstCache) -> anyhow::Resul
 
     Ok(raw
         .into_iter()
-        .map(|item| ImportRef {
-            resolved_path: resolve_import_specifier(provider.name, path, &item.specifier),
-            name: item.specifier,
-            line_number: item.line,
+        .flat_map(|item| {
+            let targets = resolve_import_targets(provider.name, path, &item.specifier);
+            let resolved: Vec<Option<PathBuf>> = if targets.is_empty() {
+                vec![None]
+            } else {
+                targets.into_iter().map(Some).collect()
+            };
+            resolved.into_iter().map(move |resolved_path| ImportRef {
+                resolved_path,
+                name: item.specifier.clone(),
+                line_number: item.line,
+            })
         })
         .collect())
 }
@@ -308,8 +316,79 @@ pub fn resolve_import_specifier(language: &str, path: &Path, specifier: &str) ->
             resolve_python_relative(path, specifier).or_else(|| resolve_python_relative(path, head))
         }
         "java" => resolve_java_class(path, specifier),
+        "go" => resolve_go_package(path, specifier),
         _ => None,
     }
+}
+
+/// Every file an import specifier refers to.
+///
+/// A Go import names a package, i.e. a directory, so it fans out to each
+/// non-test `.go` file in it; every other language resolves to a single file.
+/// Empty when the specifier is external or unresolvable.
+pub fn resolve_import_targets(language: &str, path: &Path, specifier: &str) -> Vec<PathBuf> {
+    let Some(resolved) = resolve_import_specifier(language, path, specifier) else {
+        return Vec::new();
+    };
+    if !resolved.is_dir() {
+        return vec![resolved];
+    }
+    let Ok(entries) = std::fs::read_dir(&resolved) else {
+        return Vec::new();
+    };
+    let mut files: Vec<PathBuf> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.is_file()
+                && p.extension().and_then(|e| e.to_str()) == Some("go")
+                && !p
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.ends_with("_test.go"))
+        })
+        .collect();
+    files.sort();
+    files
+}
+
+/// `github.com/acme/app/internal/convert` maps to `<module-root>/internal/convert`.
+///
+/// The module root is the nearest ancestor of the declaring file containing a
+/// `go.mod` whose `module` path is a prefix of the specifier; ancestors keep
+/// being tried so a nested module inside a workspace still resolves imports of
+/// the outer module. Standard-library and third-party imports return `None`.
+fn resolve_go_package(current: &Path, import_path: &str) -> Option<PathBuf> {
+    let mut dir = current.parent()?;
+    loop {
+        let go_mod = dir.join("go.mod");
+        if let Ok(contents) = std::fs::read_to_string(&go_mod) {
+            if let Some(module) = go_module_path(&contents) {
+                let rel = if import_path == module {
+                    Some("")
+                } else {
+                    import_path
+                        .strip_prefix(module.as_str())
+                        .and_then(|rest| rest.strip_prefix('/'))
+                };
+                if let Some(rel) = rel {
+                    let pkg_dir = dir.join(rel);
+                    return pkg_dir.is_dir().then_some(pkg_dir);
+                }
+            }
+        }
+        dir = dir.parent()?;
+    }
+}
+
+/// The `module` directive of a `go.mod` file.
+fn go_module_path(go_mod: &str) -> Option<String> {
+    go_mod.lines().find_map(|line| {
+        let mut words = line.split_whitespace();
+        if words.next()? != "module" {
+            return None;
+        }
+        Some(words.next()?.trim_matches('"').to_string())
+    })
 }
 
 /// `super::foo::Bar` resolves relative to the declaring file's own module.

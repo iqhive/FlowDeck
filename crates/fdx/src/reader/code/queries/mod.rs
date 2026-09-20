@@ -27,6 +27,7 @@ const TYPESCRIPT_SCM: &str = concat!(
 const RUST_SCM: &str = include_str!("rust.scm");
 const PYTHON_SCM: &str = include_str!("python.scm");
 const JAVA_SCM: &str = include_str!("java.scm");
+const GO_SCM: &str = include_str!("go.scm");
 
 /// Import patterns. TypeScript reuses the JavaScript file unchanged, since
 /// `import_statement`, `export_statement`, and `call_expression` are identical in
@@ -35,12 +36,14 @@ const IMPORTS_JAVASCRIPT_SCM: &str = include_str!("imports_javascript.scm");
 const IMPORTS_RUST_SCM: &str = include_str!("imports_rust.scm");
 const IMPORTS_PYTHON_SCM: &str = include_str!("imports_python.scm");
 const IMPORTS_JAVA_SCM: &str = include_str!("imports_java.scm");
+const IMPORTS_GO_SCM: &str = include_str!("imports_go.scm");
 
 /// Call-site patterns. TypeScript reuses the JavaScript file unchanged.
 const CALLS_JAVASCRIPT_SCM: &str = include_str!("calls_javascript.scm");
 const CALLS_RUST_SCM: &str = include_str!("calls_rust.scm");
 const CALLS_PYTHON_SCM: &str = include_str!("calls_python.scm");
 const CALLS_JAVA_SCM: &str = include_str!("calls_java.scm");
+const CALLS_GO_SCM: &str = include_str!("calls_go.scm");
 
 /// Compile a built-in query.
 ///
@@ -73,6 +76,7 @@ static PYTHON_QUERY: Lazy<Query> =
     Lazy::new(|| compile("python", tree_sitter_python::LANGUAGE.into(), PYTHON_SCM));
 static JAVA_QUERY: Lazy<Query> =
     Lazy::new(|| compile("java", tree_sitter_java::LANGUAGE.into(), JAVA_SCM));
+static GO_QUERY: Lazy<Query> = Lazy::new(|| compile("go", tree_sitter_go::LANGUAGE.into(), GO_SCM));
 
 static IMPORTS_JAVASCRIPT_QUERY: Lazy<Query> = Lazy::new(|| {
     compile(
@@ -107,6 +111,13 @@ static IMPORTS_JAVA_QUERY: Lazy<Query> = Lazy::new(|| {
         "imports_java",
         tree_sitter_java::LANGUAGE.into(),
         IMPORTS_JAVA_SCM,
+    )
+});
+static IMPORTS_GO_QUERY: Lazy<Query> = Lazy::new(|| {
+    compile(
+        "imports_go",
+        tree_sitter_go::LANGUAGE.into(),
+        IMPORTS_GO_SCM,
     )
 });
 
@@ -145,6 +156,8 @@ static CALLS_JAVA_QUERY: Lazy<Query> = Lazy::new(|| {
         CALLS_JAVA_SCM,
     )
 });
+static CALLS_GO_QUERY: Lazy<Query> =
+    Lazy::new(|| compile("calls_go", tree_sitter_go::LANGUAGE.into(), CALLS_GO_SCM));
 
 /// The syntactic shape of a call site, which bounds how confidently it resolves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -180,6 +193,7 @@ pub fn call_query(language_name: &str) -> Option<&'static Query> {
         "rust" => Some(&CALLS_RUST_QUERY),
         "python" => Some(&CALLS_PYTHON_QUERY),
         "java" => Some(&CALLS_JAVA_QUERY),
+        "go" => Some(&CALLS_GO_QUERY),
         _ => None,
     }
 }
@@ -266,6 +280,7 @@ pub fn import_query(language_name: &str) -> Option<&'static Query> {
         "rust" => Some(&IMPORTS_RUST_QUERY),
         "python" => Some(&IMPORTS_PYTHON_QUERY),
         "java" => Some(&IMPORTS_JAVA_QUERY),
+        "go" => Some(&IMPORTS_GO_QUERY),
         _ => None,
     }
 }
@@ -331,6 +346,7 @@ pub fn symbol_query(language_name: &str) -> Option<&'static Query> {
         "rust" => Some(&RUST_QUERY),
         "python" => Some(&PYTHON_QUERY),
         "java" => Some(&JAVA_QUERY),
+        "go" => Some(&GO_QUERY),
         _ => None,
     }
 }

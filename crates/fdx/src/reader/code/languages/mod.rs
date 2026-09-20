@@ -29,6 +29,10 @@ fn java_grammar() -> tree_sitter::Language {
     tree_sitter_java::LANGUAGE.into()
 }
 
+fn go_grammar() -> tree_sitter::Language {
+    tree_sitter_go::LANGUAGE.into()
+}
+
 pub fn get_language_provider(ext: &str) -> Option<LanguageProvider> {
     match ext {
         "rs" => Some(LanguageProvider {
@@ -50,6 +54,10 @@ pub fn get_language_provider(ext: &str) -> Option<LanguageProvider> {
         "java" => Some(LanguageProvider {
             name: "java",
             grammar: java_grammar,
+        }),
+        "go" => Some(LanguageProvider {
+            name: "go",
+            grammar: go_grammar,
         }),
         _ => None,
     }

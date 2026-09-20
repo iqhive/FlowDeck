@@ -192,3 +192,88 @@ pub fn process(fee: Fee) -> f64 {
 
     let _ = std::fs::remove_dir_all(temp_dir);
 }
+
+/// A Go import names a package (directory) under the module path declared in
+/// `go.mod`, so `github.com/acme/app/internal/convert` must resolve to every
+/// non-test `.go` file in `internal/convert`, and the inbound direction must
+/// find `main.go` from `convert.go`. Standard-library imports stay unresolved.
+#[test]
+fn go_module_imports_resolve_to_package_files() {
+    let dir = temp_dir("goimports");
+    std::fs::write(
+        dir.join("go.mod"),
+        "module github.com/acme/app\n\ngo 1.22\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("internal/convert")).unwrap();
+    std::fs::create_dir_all(dir.join("cmd/app")).unwrap();
+    std::fs::write(
+        dir.join("internal/convert/convert.go"),
+        "package convert\n\ntype Converter struct{}\n\nfunc New() *Converter { return &Converter{} }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("internal/convert/extra.go"),
+        "package convert\n\nfunc Extra() {}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("internal/convert/convert_test.go"),
+        "package convert\n\nfunc TestNew() {}\n",
+    )
+    .unwrap();
+    let main_go = dir.join("cmd/app/main.go");
+    std::fs::write(
+        &main_go,
+        "package main\n\nimport (\n\t\"fmt\"\n\n\t\"github.com/acme/app/internal/convert\"\n)\n\nfunc main() { fmt.Println(convert.New()) }\n",
+    )
+    .unwrap();
+
+    let out = analyze_out(&main_go, &dir);
+    assert_eq!(
+        outbound_files(&out),
+        vec!["convert.go".to_string(), "extra.go".to_string()],
+        "got {:?}",
+        out[0].outbound
+    );
+    let fmt_dep = out[0]
+        .outbound
+        .iter()
+        .find(|d| d.name == "fmt")
+        .expect("stdlib import is still reported");
+    assert!(!fmt_dep.resolved, "stdlib import must be unresolved");
+    let convert_dep = out[0]
+        .outbound
+        .iter()
+        .find(|d| d.path.as_deref().is_some_and(|p| p.ends_with("convert.go")))
+        .expect("convert.go dependency");
+    assert!(
+        convert_dep.prototypes.iter().any(|s| s.name == "New"),
+        "resolved package file must carry its prototypes, got {:?}",
+        convert_dep.prototypes
+    );
+
+    let cache = AstCache::new();
+    let inbound = impact::analyze_impact(
+        &[dir.join("internal/convert/convert.go")],
+        &dir,
+        1,
+        impact::ImpactDirection::In,
+        &cache,
+    )
+    .unwrap();
+    let inbound_files: Vec<String> = inbound[0]
+        .inbound
+        .iter()
+        .filter_map(|d| d.path.as_deref())
+        .filter_map(|p| Path::new(p).file_name().and_then(|n| n.to_str()))
+        .map(|s| s.to_string())
+        .collect();
+    assert_eq!(
+        inbound_files,
+        vec!["main.go".to_string()],
+        "got {inbound:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

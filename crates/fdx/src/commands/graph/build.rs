@@ -264,12 +264,12 @@ fn extract_file(abs_path: &Path, rel_path: &str, source: &str, root: &Path) -> F
     // Imports, as file-to-file edges.
     if let Some(query) = queries::import_query(provider.name) {
         for raw in queries::find_imports_via_query(&tree, source, query) {
-            let resolved = crate::reader::impact::resolve_import_specifier(
+            let resolved = crate::reader::impact::resolve_import_targets(
                 provider.name,
                 abs_path,
                 &raw.specifier,
             );
-            if let Some(target) = resolved.and_then(|t| relative_to(&t, root)) {
+            for target in resolved.iter().filter_map(|t| relative_to(t, root)) {
                 data.edges.push(Edge {
                     from: rel_path.to_string(),
                     to: target,

@@ -123,3 +123,53 @@ public class Calculator {
     assert_eq!(symbols[0].kind, "class");
     assert_eq!(symbols[0].name, "Calculator");
 }
+
+/// `fdx read internal/convert/convert.go --mode prototype` used to fail with
+/// "Failed to detect language for prototype mode" because no Go grammar was
+/// registered. Signatures must stop at the body, and the doc comment must be
+/// attached.
+#[test]
+fn test_prototype_go() {
+    let source = r#"
+package convert
+
+// Converter converts things.
+type Converter struct {
+	Name string
+}
+
+// New builds a Converter.
+func New(name string) *Converter {
+	return &Converter{Name: name}
+}
+
+func (c *Converter) Convert(in string) (string, error) {
+	return in, nil
+}
+"#;
+    let tree = parse_source(source, tree_sitter_go::LANGUAGE.into()).unwrap();
+    let reader = PrototypeReader::new();
+    let symbols = reader
+        .extract_prototypes(
+            std::path::Path::new("internal/convert/convert.go"),
+            source,
+            &tree,
+        )
+        .unwrap();
+
+    assert_eq!(symbols.len(), 3);
+    assert_eq!(symbols[0].kind, "class");
+    assert_eq!(symbols[0].name, "Converter");
+    assert_eq!(symbols[0].signature, "Converter struct");
+    assert_eq!(
+        symbols[0].doc_comment.as_deref(),
+        Some("Converter converts things.")
+    );
+    assert_eq!(symbols[1].kind, "function");
+    assert_eq!(symbols[1].signature, "func New(name string) *Converter");
+    assert_eq!(symbols[2].kind, "method");
+    assert_eq!(
+        symbols[2].signature,
+        "func (c *Converter) Convert(in string) (string, error)"
+    );
+}

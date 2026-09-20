@@ -204,3 +204,58 @@ fn arrow_function_signature_excludes_body() {
         big.signature
     );
 }
+
+/// Go: struct/interface/alias types, package-level const/var, functions,
+/// methods and interface method signatures. A function-local `var` must NOT be
+/// reported, which is why the const/var patterns are anchored to `source_file`.
+#[test]
+fn go_finds_types_funcs_methods_and_package_level_vars() {
+    let source = r#"
+package convert
+
+import "strings"
+
+const MaxDepth = 3
+
+var (
+	defaultName = "x"
+	Version     string
+)
+
+type Converter struct {
+	Name string
+}
+
+type Reader interface {
+	Read(p []byte) (int, error)
+}
+
+type Alias = Converter
+type ID string
+
+func New(name string) *Converter {
+	var local = 1
+	const inner = 2
+	_ = local + inner
+	return &Converter{Name: strings.ToUpper(name)}
+}
+
+func (c *Converter) Convert(in string) (string, error) { return in, nil }
+"#;
+    let got = extract("convert.go", source, tree_sitter_go::LANGUAGE.into());
+    expect(
+        got,
+        &[
+            ("const", "MaxDepth"),
+            ("static", "defaultName"),
+            ("static", "Version"),
+            ("class", "Converter"),
+            ("interface", "Reader"),
+            ("method", "Read"),
+            ("type", "Alias"),
+            ("type", "ID"),
+            ("function", "New"),
+            ("method", "Convert"),
+        ],
+    );
+}
