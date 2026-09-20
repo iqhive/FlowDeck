@@ -164,6 +164,45 @@ describe("fdx-validate tool", () => {
     expect(result).toContain("OK:")
   })
 
+  // fd-task.md documents `- <path> (<verb>)` and action:artifacts requires it; pre-execute must
+  // accept the same line, otherwise no affect.md can satisfy both actions.
+  it("accepts the documented '- <path> (verb)' form used by action:artifacts", async () => {
+    writeValidTopic()
+    writeFileSync(join(TMP, "src.ts"), "// exists", "utf-8")
+    writeFileSync(
+      topicAffectPath(TMP, "test-topic"),
+      "## Affected Files\n- src.ts (modify)\n- src/new.ts (create)\n- gone.ts (Delete)\n",
+      "utf-8",
+    )
+    const result = await ffx_validate()
+    expect(result).toContain("gone.ts not found")
+    expect(result).not.toContain("unknown verb")
+    expect(result).not.toContain("src.ts (modify)")
+  })
+
+  it("'- <path> (verb)' with an existing file passes", async () => {
+    writeValidTopic()
+    writeFileSync(join(TMP, "src.ts"), "// exists", "utf-8")
+    writeFileSync(
+      topicAffectPath(TMP, "test-topic"),
+      "## Affected Files\n- src.ts (modify)\n",
+      "utf-8",
+    )
+    const result = await ffx_validate()
+    expect(result).toContain("OK: 1 affect entries")
+  })
+
+  it("'- <path> (verb)' with an unknown verb is caught", async () => {
+    writeValidTopic()
+    writeFileSync(
+      topicAffectPath(TMP, "test-topic"),
+      "## Affected Files\n- src/foo.ts (frobnicate)\n",
+      "utf-8",
+    )
+    const result = await ffx_validate()
+    expect(result).toContain("unknown verb 'frobnicate'")
+  })
+
   async function ffx_validate() {
     return fdxValidateTool.execute({ action: "pre-execute", topic: "test-topic" }, ctx)
   }

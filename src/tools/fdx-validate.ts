@@ -73,14 +73,22 @@ function parseAffect(
       continue
     }
 
-    const spaceIdx = body.indexOf(" ")
-    if (spaceIdx < 0) {
-      errors.push(`line ${i + 1}: malformed entry (expected '<verb> <path>')`)
-      continue
+    // Documented form: `- <path> (<verb>)`. Legacy form: `- <verb> <path>`.
+    const trailing = /^(.*\S)\s*\((\w+)\)$/.exec(body)
+    let verb: string
+    let path: string
+    if (trailing) {
+      path = trailing[1].trim()
+      verb = trailing[2].toLowerCase()
+    } else {
+      const spaceIdx = body.indexOf(" ")
+      if (spaceIdx < 0) {
+        errors.push(`line ${i + 1}: malformed entry (expected '<path> (<verb>)')`)
+        continue
+      }
+      verb = body.slice(0, spaceIdx).toLowerCase()
+      path = body.slice(spaceIdx + 1).trim()
     }
-
-    const verb = body.slice(0, spaceIdx).toLowerCase()
-    const path = body.slice(spaceIdx + 1).trim()
 
     if (!path) {
       errors.push(`line ${i + 1}: missing path`)
