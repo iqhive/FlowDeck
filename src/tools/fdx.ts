@@ -1,10 +1,13 @@
 import { tool, type ToolDefinition } from "../tool-definition"
-import { execFileSync, execSync } from "node:child_process"
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
+
+const execFileAsync = promisify(execFile)
 
 /** Resolve fdx binary: check PATH only (installed via cargo install). */
-function fdxBin(): string {
+async function fdxBin(): Promise<string> {
   try {
-    execSync("fdx --help", { stdio: "ignore" })
+    await execFileAsync("fdx", ["--help"], { timeout: 5_000 })
     return "fdx"
   } catch {
     throw new Error("fdx not found in PATH — install it with `bun run build:fdx`")
@@ -14,15 +17,20 @@ function fdxBin(): string {
 const FDX_TIMEOUT_MS = 30_000
 const FDX_MAX_BUFFER = 50 * 1024 * 1024 // 50MB
 
-function runFdx(args: string[]): string {
-  const bin = fdxBin() // resolve lazily per call
+/**
+ * Runs in the project directory: the plugin lives in the OpenCode server process,
+ * whose cwd is unrelated to the project. Async so a slow fdx call cannot stall the server.
+ */
+async function runFdx(args: string[], cwd: string): Promise<string> {
+  const bin = await fdxBin() // resolve lazily per call
   try {
-    return execFileSync(bin, args, {
+    const { stdout } = await execFileAsync(bin, args, {
+      cwd,
       encoding: "utf-8",
       timeout: FDX_TIMEOUT_MS,
       maxBuffer: FDX_MAX_BUFFER,
-      stdio: ["pipe", "pipe", "pipe"],
     })
+    return stdout
   } catch (err: any) {
     if (err?.code === "ENOBUFS") {
       throw new Error(
@@ -52,7 +60,7 @@ export const fdxReadTool: ToolDefinition = tool({
     format: tool.schema.enum(["text", "json"]).optional(),
     no_cache: tool.schema.boolean().optional(),
   },
-  async execute(args): Promise<string> {
+  async execute(args, ctx): Promise<string> {
     const cmd: string[] = ["read", args.file]
     if (args.mode) cmd.push("--mode", args.mode)
     if (args.symbol) cmd.push("--symbol", args.symbol)
@@ -61,7 +69,7 @@ export const fdxReadTool: ToolDefinition = tool({
     if (args.with_deps !== undefined) cmd.push("--with-deps", String(args.with_deps))
     if (args.format) cmd.push("--format", args.format)
     if (args.no_cache) cmd.push("--no-cache")
-    return runFdx(cmd)
+    return runFdx(cmd, ctx.directory)
   },
 })
 
@@ -78,14 +86,14 @@ export const fdxSearchTool: ToolDefinition = tool({
     format: tool.schema.enum(["text", "json"]).optional(),
     no_cache: tool.schema.boolean().optional(),
   },
-  async execute(args): Promise<string> {
+  async execute(args, ctx): Promise<string> {
     const cmd: string[] = ["search", args.pattern]
     const paths = args.paths && args.paths.length > 0 ? args.paths : ["."]
     cmd.push(...paths)
     if (args.kind) cmd.push("--kind", args.kind)
     if (args.format) cmd.push("--format", args.format)
     if (args.no_cache) cmd.push("--no-cache")
-    return runFdx(cmd)
+    return runFdx(cmd, ctx.directory)
   },
 })
 
@@ -104,7 +112,7 @@ export const fdxGrepTool: ToolDefinition = tool({
     max_matches: tool.schema.number().optional(),
     format: tool.schema.enum(["text", "json"]).optional(),
   },
-  async execute(args): Promise<string> {
+  async execute(args, ctx): Promise<string> {
     const cmd: string[] = ["grep", args.pattern]
     const paths = args.paths && args.paths.length > 0 ? args.paths : ["."]
     cmd.push(...paths)
@@ -113,7 +121,7 @@ export const fdxGrepTool: ToolDefinition = tool({
     if (args.case_sensitive) cmd.push("--case-sensitive")
     if (args.max_matches !== undefined) cmd.push("--max-matches", String(args.max_matches))
     if (args.format) cmd.push("--format", args.format)
-    return runFdx(cmd)
+    return runFdx(cmd, ctx.directory)
   },
 })
 
@@ -131,14 +139,14 @@ export const fdxBatchTool: ToolDefinition = tool({
     no_cache: tool.schema.boolean().optional(),
     max_files: tool.schema.number().optional(),
   },
-  async execute(args): Promise<string> {
+  async execute(args, ctx): Promise<string> {
     const cmd: string[] = ["batch", ...args.patterns]
     if (args.mode) cmd.push("--mode", args.mode)
     if (args.symbol) cmd.push("--symbol", args.symbol)
     if (args.format) cmd.push("--format", args.format)
     if (args.no_cache) cmd.push("--no-cache")
     if (args.max_files !== undefined) cmd.push("--max-files", String(args.max_files))
-    return runFdx(cmd)
+    return runFdx(cmd, ctx.directory)
   },
 })
 
@@ -155,13 +163,13 @@ export const fdxImpactTool: ToolDefinition = tool({
     format: tool.schema.enum(["text", "json"]).optional(),
     root: tool.schema.string().optional(),
   },
-  async execute(args): Promise<string> {
+  async execute(args, ctx): Promise<string> {
     const cmd: string[] = ["impact", ...args.files]
     if (args.depth !== undefined) cmd.push("--depth", String(args.depth))
     if (args.direction) cmd.push("--direction", args.direction)
     if (args.format) cmd.push("--format", args.format)
     if (args.root) cmd.push("--root", args.root)
-    return runFdx(cmd)
+    return runFdx(cmd, ctx.directory)
   },
 })
 
@@ -195,7 +203,7 @@ export const fdxGraphTool: ToolDefinition = tool({
     target2: tool.schema.string().optional(),
     format: tool.schema.enum(["text", "json"]).optional(),
   },
-  async execute(args): Promise<string> {
+  async execute(args, ctx): Promise<string> {
     const needsTarget = ["query", "impact", "deps", "path", "explain"]
     if (needsTarget.includes(args.action) && !args.target) {
       throw new Error("fdx-graph: action=" + args.action + " requires `target`")
@@ -207,7 +215,7 @@ export const fdxGraphTool: ToolDefinition = tool({
     if (args.target) cmd.push(args.target)
     if (args.target2) cmd.push(args.target2)
     if (args.format) cmd.push("--format", args.format)
-    return runFdx(cmd)
+    return runFdx(cmd, ctx.directory)
   },
 })
 
@@ -225,7 +233,7 @@ export const fdxOutlineTool: ToolDefinition = tool({
     format: tool.schema.enum(["text", "json"]).optional(),
     no_cache: tool.schema.boolean().optional(),
   },
-  async execute(args): Promise<string> {
+  async execute(args, ctx): Promise<string> {
     const cmd: string[] = ["outline"]
     const paths = args.paths && args.paths.length > 0 ? args.paths : ["."]
     cmd.push(...paths)
@@ -234,7 +242,7 @@ export const fdxOutlineTool: ToolDefinition = tool({
     if (args.min_lines !== undefined) cmd.push("--min-lines", String(args.min_lines))
     if (args.format) cmd.push("--format", args.format)
     if (args.no_cache) cmd.push("--no-cache")
-    return runFdx(cmd)
+    return runFdx(cmd, ctx.directory)
   },
 })
 
@@ -252,7 +260,7 @@ export const fdxDiffTool: ToolDefinition = tool({
     no_cache: tool.schema.boolean().optional(),
     root: tool.schema.string().optional(),
   },
-  async execute(args): Promise<string> {
+  async execute(args, ctx): Promise<string> {
     const cmd: string[] = ["diff"]
     if (args.commit) cmd.push(args.commit)
     if (args.staged) cmd.push("--staged")
@@ -260,7 +268,7 @@ export const fdxDiffTool: ToolDefinition = tool({
     if (args.no_cache) cmd.push("--no-cache")
     if (args.root) cmd.push("--root", args.root)
     if (args.paths && args.paths.length > 0) cmd.push(...args.paths)
-    return runFdx(cmd)
+    return runFdx(cmd, ctx.directory)
   },
 })
 
@@ -274,10 +282,10 @@ export const fdxGitTool: ToolDefinition = tool({
     subcommand: tool.schema.string(),
     args: tool.schema.array(tool.schema.string()).optional(),
   },
-  async execute(args): Promise<string> {
+  async execute(args, ctx): Promise<string> {
     const cmd: string[] = ["git", args.subcommand]
     if (args.args && args.args.length > 0) cmd.push(...args.args)
-    return runFdx(cmd)
+    return runFdx(cmd, ctx.directory)
   },
 })
 
@@ -292,12 +300,12 @@ export const fdxLsTool: ToolDefinition = tool({
     all: tool.schema.boolean().optional(),
     format: tool.schema.enum(["text", "json"]).optional(),
   },
-  async execute(args): Promise<string> {
+  async execute(args, ctx): Promise<string> {
     const cmd: string[] = ["ls"]
     if (args.path) cmd.push(args.path)
     if (args.all) cmd.push("--all")
     if (args.format) cmd.push("--format", args.format)
-    return runFdx(cmd)
+    return runFdx(cmd, ctx.directory)
   },
 })
 
@@ -313,13 +321,13 @@ export const fdxTreeTool: ToolDefinition = tool({
     dirs_only: tool.schema.boolean().optional(),
     format: tool.schema.enum(["text", "json"]).optional(),
   },
-  async execute(args): Promise<string> {
+  async execute(args, ctx): Promise<string> {
     const cmd: string[] = ["tree"]
     if (args.path) cmd.push(args.path)
     if (args.depth !== undefined) cmd.push("--depth", String(args.depth))
     if (args.dirs_only) cmd.push("--dirs-only")
     if (args.format) cmd.push("--format", args.format)
-    return runFdx(cmd)
+    return runFdx(cmd, ctx.directory)
   },
 })
 
@@ -333,10 +341,10 @@ export const fdxTestTool: ToolDefinition = tool({
     runner: tool.schema.enum(["cargo", "pytest", "jest", "vitest", "go", "rspec", "rails"]),
     args: tool.schema.array(tool.schema.string()).optional(),
   },
-  async execute(args): Promise<string> {
+  async execute(args, ctx): Promise<string> {
     const cmd: string[] = ["test", args.runner]
     if (args.args && args.args.length > 0) cmd.push(...args.args)
-    return runFdx(cmd)
+    return runFdx(cmd, ctx.directory)
   },
 })
 
@@ -350,10 +358,10 @@ export const fdxLintTool: ToolDefinition = tool({
     linter: tool.schema.enum(["ruff", "clippy", "tsc", "eslint", "biome", "golangci", "rubocop"]),
     args: tool.schema.array(tool.schema.string()).optional(),
   },
-  async execute(args): Promise<string> {
+  async execute(args, ctx): Promise<string> {
     const cmd: string[] = ["lint", args.linter]
     if (args.args && args.args.length > 0) cmd.push(...args.args)
-    return runFdx(cmd)
+    return runFdx(cmd, ctx.directory)
   },
 })
 
@@ -371,14 +379,14 @@ export const fdxContextTool: ToolDefinition = tool({
     stage: tool.schema.string().optional(),
     summary: tool.schema.string().optional(),
   },
-  async execute(args): Promise<string> {
+  async execute(args, ctx): Promise<string> {
     const cmd: string[] = ["context", "--topic", args.topic, "--action", args.action]
     if (args.action === "append") {
       if (args.agent) cmd.push("--agent", args.agent)
       if (args.stage) cmd.push("--stage", args.stage)
       if (args.summary) cmd.push("--summary", args.summary)
     }
-    return runFdx(cmd)
+    return runFdx(cmd, ctx.directory)
   },
 })
 
@@ -396,13 +404,13 @@ export const fdxDecisionsTool: ToolDefinition = tool({
     rationale: tool.schema.string().optional(),
     made_by: tool.schema.string().optional(),
   },
-  async execute(args): Promise<string> {
+  async execute(args, ctx): Promise<string> {
     const cmd: string[] = ["decisions", "--topic", args.topic, "--action", args.action]
     if (args.action === "record") {
       if (args.decision) cmd.push("--decision", args.decision)
       if (args.rationale) cmd.push("--rationale", args.rationale)
       if (args.made_by) cmd.push("--made-by", args.made_by)
     }
-    return runFdx(cmd)
+    return runFdx(cmd, ctx.directory)
   },
 })

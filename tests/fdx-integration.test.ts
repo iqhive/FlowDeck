@@ -10,14 +10,50 @@
 
 import { describe, it, expect } from "vitest"
 import { REGISTERED_COMMANDS } from "@/services/supervisor-binding"
-import { existsSync, readFileSync } from "node:fs"
-import { resolve } from "node:path"
+import { fdxLsTool } from "@/tools/fdx"
+import { toPluginTool } from "@/tool-definition"
+import { spawnSync } from "node:child_process"
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join, resolve } from "node:path"
 
 const SRC_DIR = resolve(import.meta.dirname, "../src")
 
 function readSrc(path: string): string {
   return readFileSync(resolve(SRC_DIR, path), "utf-8")
 }
+
+// ─── fdx runs in the project directory, not the server's cwd ──────────────────
+
+const fdxOnPath = spawnSync("fdx", ["--version"], { stdio: "ignore" }).status === 0
+
+describe("fdx tools run against the plugin's project directory", () => {
+  it("passes the tool context directory as cwd to fdx", () => {
+    const content = readSrc("tools/fdx.ts")
+    expect(content).toMatch(/cwd,?\s*\n/)
+    expect(content).not.toMatch(/execFileSync|execSync/)
+  })
+
+  it.skipIf(!fdxOnPath)("lists the project directory even when process.cwd() is elsewhere", async () => {
+    const project = mkdtempSync(join(tmpdir(), "fdx-cwd-"))
+    writeFileSync(join(project, "only-in-project.txt"), "x")
+    const plugin = toPluginTool("fdx-ls", fdxLsTool, { directory: project, worktree: project })
+    const context = {
+      sessionID: "s",
+      messageID: "m",
+      agent: "orchestrator",
+      id: "c",
+      progress: async () => {},
+    }
+    try {
+      expect(process.cwd()).not.toBe(project)
+      const result = await plugin.execute({}, context as never)
+      expect(result.content).toContain("only-in-project.txt")
+    } finally {
+      rmSync(project, { recursive: true, force: true })
+    }
+  })
+})
 
 // ─── Bug 1: fdxBin() called at module load time ───────────────────────────────
 
