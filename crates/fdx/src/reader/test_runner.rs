@@ -1,4 +1,4 @@
-use crate::runner::{run, CommandOutput};
+use crate::runner::{run, run_in_dir, CommandOutput};
 use crate::tee::save_tee;
 use anyhow::{bail, Result};
 
@@ -51,8 +51,245 @@ fn run_vitest(args: &[String]) -> Result<CommandOutput> {
 }
 
 fn run_go_test(args: &[String]) -> Result<CommandOutput> {
-    let extra: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    run("go", &std::iter::once("test").chain(extra.iter().copied()).collect::<Vec<_>>())
+    let (max_procs, parallelism) = go_cpu_cap();
+    let gomaxprocs = max_procs.to_string();
+    let env: [(&str, &str); 1] = [("GOMAXPROCS", gomaxprocs.as_str())];
+    let go_args = with_parallelism_flag(args, parallelism);
+
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    // Single-module repo: keep today's behavior (run in the inherited cwd).
+    if cwd.join("go.mod").is_file() {
+        let cmd_args: Vec<&str> = std::iter::once("test")
+            .chain(go_args.iter().map(|s| s.as_str()))
+            .collect();
+        return run_with_env_go("go", &cmd_args, &env, None);
+    }
+    // Multi-module workspace: one `go test` per `use` dir.
+    let go_work = cwd.join("go.work");
+    if go_work.is_file() {
+        if let Ok(content) = std::fs::read_to_string(&go_work) {
+            let modules = parse_go_work_uses(&content);
+            if !modules.is_empty() {
+                return run_go_workspace_tests(&cwd, &modules, &go_args, &env);
+            }
+        }
+        // Unparseable/empty go.work: fall through to go's natural error.
+    }
+
+    let cmd_args: Vec<&str> = std::iter::once("test")
+        .chain(go_args.iter().map(|s| s.as_str()))
+        .collect();
+    run_with_env_go("go", &cmd_args, &env, None)
+}
+
+/// Max parallel `go test` packages (`-p`) and `GOMAXPROCS` cap.
+///
+/// Hard requirement: never use more than 16 cores. Defaults mirror
+/// `make test` in the linkcalendar repo: 4 parallel packages x 4 procs.
+fn go_cpu_cap() -> (u32, u32) {
+    let cpus: u32 = std::env::var("FD_TEST_CPUS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|v: &u32| *v > 0)
+        .unwrap_or(16);
+    let parallelism: u32 = std::env::var("FD_TEST_P")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|v: &u32| *v > 0)
+        .unwrap_or(4);
+    let max_procs = std::cmp::max(1, cpus / std::cmp::max(1, parallelism));
+    (max_procs, parallelism)
+}
+
+/// Prepend `-p <parallelism>` unless the caller already passed a `-p` flag.
+/// With no caller args, default to testing the whole module (`./...`).
+fn with_parallelism_flag(args: &[String], parallelism: u32) -> Vec<String> {
+    let has_p = args.iter().any(|a| {
+        a == "-p" || a.starts_with("-p=") || (a.starts_with("-p") && a[2..].starts_with(|c: char| c.is_ascii_digit()))
+    });
+    let mut out = Vec::with_capacity(args.len() + 3);
+    if !has_p {
+        out.push("-p".to_string());
+        out.push(parallelism.to_string());
+    }
+    out.extend(args.iter().cloned());
+    if args.is_empty() {
+        out.push("./...".to_string());
+    }
+    out
+}
+
+/// Strip one layer of surrounding single or double quotes, if present.
+fn strip_path_quotes(s: &str) -> &str {
+    let s = s.trim();
+    if s.len() >= 2 {
+        let b = s.as_bytes();
+        if (b[0] == b'"' && b[s.len() - 1] == b'"')
+            || (b[0] == b'\'' && b[s.len() - 1] == b'\'')
+        {
+            return s[1..s.len() - 1].trim();
+        }
+    }
+    s
+}
+
+/// Push whitespace-separated tokens, dropping empties, lone parens, and quotes.
+fn push_use_tokens(uses: &mut Vec<String>, s: &str) {
+    for part in s.split_whitespace() {
+        if part.is_empty() || part == "(" || part == ")" {
+            continue;
+        }
+        let p = strip_path_quotes(part.trim_matches(|c| c == '(' || c == ')'));
+        if p.is_empty() || p == ")" || p == "use" {
+            continue;
+        }
+        uses.push(p.to_string());
+    }
+}
+
+/// Parse `use` directives from go.work content.
+///
+/// Supports `use ./x` one-liners and `use ( ... )` blocks.
+/// Strips `//` comments and blank lines; ignores `go`/`toolchain`/`replace`.
+fn parse_go_work_uses(content: &str) -> Vec<String> {
+    let mut uses = Vec::new();
+    let mut in_use_block = false;
+    for raw in content.lines() {
+        let line = match raw.find("//") {
+            Some(i) => &raw[..i],
+            None => raw,
+        };
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if in_use_block {
+            if line == ")" {
+                in_use_block = false;
+                continue;
+            }
+            // Trailing `)` on the same line closes the block (e.g. `./b )`).
+            let (effective, closes) = match line.strip_suffix(')') {
+                Some(prefix) => (prefix.trim(), true),
+                None => (line, false),
+            };
+            if effective == "use" || effective.is_empty() {
+                if closes {
+                    in_use_block = false;
+                }
+                continue;
+            }
+            let candidate = match effective.strip_prefix("use") {
+                Some(tail)
+                    if tail.starts_with(|c: char| c.is_whitespace() || c == '(') =>
+                {
+                    tail.trim_start().trim_start_matches('(').trim()
+                }
+                _ => effective,
+            };
+            push_use_tokens(&mut uses, candidate);
+            if closes {
+                in_use_block = false;
+            }
+            continue;
+        }
+        let Some(tail) = line.strip_prefix("use") else {
+            continue;
+        };
+        if !(tail.is_empty() || tail.starts_with(|c: char| c.is_whitespace() || c == '('))
+        {
+            continue;
+        }
+        let tail = tail.trim();
+        if tail.is_empty() {
+            continue;
+        }
+        if tail.starts_with('(') {
+            let inner = tail.trim_start_matches('(').trim();
+            if inner.is_empty() {
+                in_use_block = true;
+                continue;
+            }
+            if inner.ends_with(')') {
+                let body = inner.trim_end_matches(')').trim();
+                if body.is_empty() {
+                    continue; // `use ( )`: empty single-line block, stays closed.
+                }
+                push_use_tokens(&mut uses, body);
+                continue;
+            }
+            in_use_block = true; // `use ( ./a` with entries on later lines.
+            push_use_tokens(&mut uses, inner);
+            continue;
+        }
+        push_use_tokens(&mut uses, tail);
+    }
+    uses
+}
+
+fn run_with_env_go(
+    program: &str,
+    args: &[&str],
+    env: &[(&str, &str)],
+    cwd: Option<&std::path::Path>,
+) -> Result<CommandOutput> {
+    run_in_dir(program, args, env, cwd)
+}
+
+fn run_go_workspace_tests(
+    root: &std::path::Path,
+    modules: &[String],
+    go_args: &[String],
+    env: &[(&str, &str)],
+) -> Result<CommandOutput> {
+    let mut combined_out = String::new();
+    let mut combined_err = String::new();
+    let mut success = true;
+    let mut first_code = 0;
+    for module in modules {
+        let dir = root.join(module);
+        let cmd_args: Vec<&str> = std::iter::once("test")
+            .chain(go_args.iter().map(|s| s.as_str()))
+            .collect();
+        let header = format!("=== {} ===", module);
+        match run_in_dir("go", &cmd_args, env, Some(&dir)) {
+            Ok(out) => {
+                combined_out.push_str(&header);
+                combined_out.push('\n');
+                combined_out.push_str(&out.stdout);
+                if !out.stdout.ends_with('\n') {
+                    combined_out.push('\n');
+                }
+                combined_err.push_str(&header);
+                combined_err.push('\n');
+                combined_err.push_str(&out.stderr);
+                if !out.stderr.ends_with('\n') {
+                    combined_err.push('\n');
+                }
+                if !out.success {
+                    success = false;
+                    if first_code == 0 {
+                        first_code = out.exit_code;
+                    }
+                }
+            }
+            Err(e) => {
+                combined_out.push_str(&header);
+                combined_out.push('\n');
+                combined_out.push_str(&format!("error running go test: {}\n", e));
+                success = false;
+                if first_code == 0 {
+                    first_code = 1;
+                }
+            }
+        }
+    }
+    Ok(CommandOutput {
+        stdout: combined_out,
+        stderr: combined_err,
+        exit_code: if success { 0 } else { first_code },
+        success,
+    })
 }
 
 fn run_rspec(args: &[String]) -> Result<CommandOutput> {
@@ -320,7 +557,10 @@ fn compress_go_output(original: &CommandOutput, combined: &str) -> Result<Comman
     let mut in_failure = false;
 
     for line in combined.lines() {
-        if line.starts_with("--- FAIL:") {
+        if line.starts_with("=== ") {
+            // Per-module header from workspace runs: keep for attribution.
+            failures.push(line.to_string());
+        } else if line.starts_with("--- FAIL:") {
             in_failure = true;
             failures.push(line.to_string());
         } else if in_failure {
@@ -403,4 +643,165 @@ fn compress_rspec_output(original: &CommandOutput, _combined: &str) -> Result<Co
 fn compress_rails_output(original: &CommandOutput, combined: &str) -> Result<CommandOutput> {
     // Rails test output is similar to minitest
     compress_go_output(original, combined)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_single_line_use_directives() {
+        let content = "go 1.21\n\nuse ./a\nuse ./services/b\n";
+        assert_eq!(parse_go_work_uses(content), vec!["./a", "./services/b"]);
+    }
+
+    #[test]
+    fn parses_use_block_form() {
+        let content = "go 1.21\n\nuse (\n\t./a\n\t./b\n)\n";
+        assert_eq!(parse_go_work_uses(content), vec!["./a", "./b"]);
+    }
+
+    #[test]
+    fn strips_comments_blanks_and_ignores_other_directives() {
+        let content = "go 1.21\n\n// a comment\nuse ./a // trailing\n\nuse (\n  ./b // inline\n\n  ./c\n)\n\nreplace example.com => ../x\ntoolchain go1.21.0\n";
+        assert_eq!(
+            parse_go_work_uses(content),
+            vec!["./a", "./b", "./c"]
+        );
+    }
+
+    #[test]
+    fn parses_inline_fixture_workspace() {
+        let content = "go 1.21\n\nuse (\n\t./a\n\t./services/b\n\t./tools/c\n)\n";
+        assert_eq!(
+            parse_go_work_uses(content),
+            vec!["./a", "./services/b", "./tools/c"]
+        );
+    }
+
+    #[test]
+    fn injects_p_flag_and_defaults_to_all_packages() {
+        assert_eq!(
+            with_parallelism_flag(&[], 4),
+            vec!["-p", "4", "./..."]
+        );
+        let args = vec!["./...".to_string()];
+        assert_eq!(
+            with_parallelism_flag(&args, 4),
+            vec!["-p", "4", "./..."]
+        );
+    }
+
+    #[test]
+    fn respects_caller_p_flag() {
+        let args = vec!["-p".to_string(), "2".to_string(), "./...".to_string()];
+        assert_eq!(
+            with_parallelism_flag(&args, 4),
+            vec!["-p", "2", "./..."]
+        );
+        let args = vec!["-p=8".to_string()];
+        assert_eq!(with_parallelism_flag(&args, 4), vec!["-p=8"]);
+    }
+
+    #[test]
+    fn respects_attached_p_flag() {
+        let args = vec!["-p4".to_string(), "./...".to_string()];
+        assert_eq!(
+            with_parallelism_flag(&args, 4),
+            vec!["-p4", "./..."]
+        );
+    }
+
+    #[test]
+    fn go_cpu_cap_defaults_and_bad_input() {
+        fn with_vars(vars: &[(&str, Option<&str>)], f: impl Fn()) {
+            let saved: Vec<(&str, Option<String>)> = vars
+                .iter()
+                .map(|(k, _)| (*k, std::env::var(*k).ok()))
+                .collect();
+            for (k, v) in vars {
+                match v {
+                    Some(val) => unsafe { std::env::set_var(k, val) },
+                    None => unsafe { std::env::remove_var(k) },
+                }
+            }
+            f();
+            for (k, v) in saved {
+                match v {
+                    Some(val) => unsafe { std::env::set_var(k, val) },
+                    None => unsafe { std::env::remove_var(k) },
+                }
+            }
+        }
+        with_vars(&[("FD_TEST_CPUS", None), ("FD_TEST_P", None)], || {
+            assert_eq!(go_cpu_cap(), (4, 4)); // 16 / 4
+        });
+        with_vars(
+            &[("FD_TEST_CPUS", None), ("FD_TEST_P", Some("0"))],
+            || assert_eq!(go_cpu_cap(), (4, 4)),
+        );
+        with_vars(
+            &[("FD_TEST_CPUS", None), ("FD_TEST_P", Some("bogus"))],
+            || assert_eq!(go_cpu_cap(), (4, 4)),
+        );
+        with_vars(
+            &[("FD_TEST_CPUS", Some("0")), ("FD_TEST_P", None)],
+            || assert_eq!(go_cpu_cap(), (4, 4)),
+        );
+        with_vars(
+            &[("FD_TEST_CPUS", Some("8")), ("FD_TEST_P", Some("2"))],
+            || assert_eq!(go_cpu_cap(), (4, 2)),
+        );
+    }
+
+    #[test]
+    fn parses_single_line_use_block() {
+        assert_eq!(parse_go_work_uses("go 1.21\nuse ( ./a )\n"), vec!["./a"]);
+        assert_eq!(
+            parse_go_work_uses("go 1.21\nuse ( ./a ./b )\n"),
+            vec!["./a", "./b"]
+        );
+    }
+
+    #[test]
+    fn empty_use_block_emits_nothing() {
+        assert!(parse_go_work_uses("go 1.21\nuse ( )\n").is_empty());
+        assert!(parse_go_work_uses("go 1.21\nuse (\n)\nuse ./a\n").eq(&vec!["./a"]));
+        assert!(
+            parse_go_work_uses("go 1.21\nuse (\n\t./a\n\t./b\n)\nuse ./c\n")
+                .eq(&vec!["./a", "./b", "./c"])
+        );
+    }
+
+    #[test]
+    fn tolerates_quotes_and_tab_separators() {
+        assert_eq!(
+            parse_go_work_uses("go 1.21\nuse \"./a\"\nuse './b'\n"),
+            vec!["./a", "./b"]
+        );
+        assert_eq!(
+            parse_go_work_uses("go 1.21\nuse\t./a\nuse(./b)\n"),
+            vec!["./a", "./b"]
+        );
+        assert_eq!(
+            parse_go_work_uses("go 1.21\nuse (\n\t\"./a\"\n\t'./b'\n)\n"),
+            vec!["./a", "./b"]
+        );
+        assert!(parse_go_work_uses("go 1.21\nuse\nuse ./a\n").eq(&vec!["./a"]));
+    }
+
+    #[test]
+    fn failure_output_keeps_module_headers() {
+        let out = CommandOutput {
+            stdout: "=== ./a ===\n--- FAIL: TestX\n    x_test.go:1: boom\n=== ./b ===\nok\n"
+                .to_string(),
+            stderr: String::new(),
+            exit_code: 1,
+            success: false,
+        };
+        let combined = format!("{}\n{}", out.stdout, out.stderr);
+        let compressed = compress_go_output(&out, &combined).unwrap();
+        assert!(compressed.stdout.contains("=== ./a ==="));
+        assert!(compressed.stdout.contains("--- FAIL: TestX"));
+    }
 }

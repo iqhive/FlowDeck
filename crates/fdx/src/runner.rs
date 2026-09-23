@@ -27,6 +27,21 @@ pub fn run(program: &str, args: &[&str]) -> Result<CommandOutput> {
 /// `env` is a slice of `(key, value)` pairs to set in the subprocess environment.
 /// Returns an error if the program is not found in PATH.
 pub fn run_with_env(program: &str, args: &[&str], env: &[(&str, &str)]) -> Result<CommandOutput> {
+    run_in_dir(program, args, env, None)
+}
+
+/// Run a program with arguments, additional environment variables, and a
+/// working directory.
+///
+/// `cwd` overrides the subprocess working directory when `Some`; `None`
+/// inherits the current process directory (same as [`run_with_env`]).
+/// Returns an error if the program is not found in PATH.
+pub fn run_in_dir(
+    program: &str,
+    args: &[&str],
+    env: &[(&str, &str)],
+    cwd: Option<&std::path::Path>,
+) -> Result<CommandOutput> {
     let mut cmd = Command::new(program);
     cmd.args(args)
         .stdout(Stdio::piped())
@@ -34,6 +49,10 @@ pub fn run_with_env(program: &str, args: &[&str], env: &[(&str, &str)]) -> Resul
 
     for (key, value) in env {
         cmd.env(key, value);
+    }
+
+    if let Some(dir) = cwd {
+        cmd.current_dir(dir);
     }
 
     let output = cmd.output().with_context(|| {
