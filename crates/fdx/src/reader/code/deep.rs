@@ -7,6 +7,7 @@ use std::collections::HashSet;
 use std::path::Path;
 use tree_sitter::{Node, Tree};
 
+#[derive(Default)]
 pub struct DeepReader;
 
 impl DeepReader {

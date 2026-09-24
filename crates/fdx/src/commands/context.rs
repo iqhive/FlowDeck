@@ -60,7 +60,7 @@ pub fn clear(home: &Path, project_slug: &str, topic: &str) -> Result<String, Str
     Ok(if existed {
         format!("Cleared {}", path.display())
     } else {
-        format!("Clear: file did not exist (noop)")
+        "Clear: file did not exist (noop)".to_string()
     })
 }
 

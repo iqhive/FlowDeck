@@ -151,7 +151,7 @@ fn push_use_tokens(uses: &mut Vec<String>, s: &str) {
 ///
 /// Supports `use ./x` one-liners and `use ( ... )` blocks.
 /// Strips `//` comments and blank lines; ignores `go`/`toolchain`/`replace`.
-fn parse_go_work_uses(content: &str) -> Vec<String> {
+pub(crate) fn parse_go_work_uses(content: &str) -> Vec<String> {
     let mut uses = Vec::new();
     let mut in_use_block = false;
     for raw in content.lines() {

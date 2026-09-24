@@ -138,6 +138,7 @@ pub fn node_text(node: Node, source: &str) -> String {
 }
 
 
+#[derive(Default)]
 pub struct PrototypeReader;
 
 impl PrototypeReader {

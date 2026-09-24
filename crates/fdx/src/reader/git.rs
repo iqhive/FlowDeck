@@ -52,8 +52,8 @@ fn git_status(args: &[&str]) -> Result<CommandOutput> {
 
         if status.starts_with('?') {
             untracked.push(file.to_string());
-        } else if status.starts_with(' ') {
-            unstaged.push((status[1..].to_string(), file.to_string()));
+        } else if let Some(rest) = status.strip_prefix(' ') {
+            unstaged.push((rest.to_string(), file.to_string()));
         } else {
             staged.push((status[0..1].to_string(), file.to_string()));
         }
@@ -357,7 +357,7 @@ fn git_branch(args: &[&str]) -> Result<CommandOutput> {
             continue;
         }
         let current = line.starts_with('*');
-        let rest = if current { &line[2..] } else { &line[2..] };
+        let rest = &line[2..];
 
         let parts: Vec<&str> = rest.split_whitespace().collect();
         if parts.is_empty() {

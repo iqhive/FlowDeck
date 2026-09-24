@@ -577,7 +577,7 @@ fn main() {
                 Ok((files, total_matches, truncated)) => {
                     let tee_path = if truncated {
                         let full_output = build_full_grep_output(&files, total_matches);
-                        fdx::tee::save_tee("grep", &full_output).ok().map(|p| p)
+                        fdx::tee::save_tee("grep", &full_output).ok()
                     } else {
                         None
                     };

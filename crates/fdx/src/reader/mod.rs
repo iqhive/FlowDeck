@@ -25,18 +25,13 @@ use crate::reader::code::{
 use crate::reader::text::{read_text, TextResult};
 use std::path::Path;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ReadMode {
+    #[default]
     Auto,
     Raw,
     Prototype,
     Deep,
-}
-
-impl Default for ReadMode {
-    fn default() -> Self {
-        ReadMode::Auto
-    }
 }
 
 impl std::str::FromStr for ReadMode {
